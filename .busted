@@ -1,0 +1,7 @@
+return {
+    default = {
+        ROOT = ".",
+        helper = "spec/test_helper.lua",
+        pattern = "_spec%.lua$",
+    },
+}

@@ -1,0 +1,138 @@
+local WowMock = require("spec.helpers.wow_mock")
+local Loader = require("spec.helpers.addon_loader")
+
+describe("IlvlTooltip inspect orchestrator", function()
+    local env
+    local NS
+    local cache
+    local inspect
+    local visibleUpdates
+
+    local function isInspectableUnit(unit)
+        return _G.UnitExists(unit) and _G.UnitIsPlayer(unit) and _G.CanInspect(unit) and _G.CheckInteractDistance(unit, 1)
+    end
+
+    local function resolveBestUnitTokenForGuid(guid, fallbackUnit)
+        if fallbackUnit and _G.UnitExists(fallbackUnit) and _G.UnitGUID(fallbackUnit) == guid then
+            return fallbackUnit
+        end
+
+        local byGuid = _G.UnitTokenFromGUID(guid)
+        if byGuid and _G.UnitExists(byGuid) then
+            return byGuid
+        end
+
+        return fallbackUnit
+    end
+
+    before_each(function()
+        env = WowMock.new()
+        env:installGlobals()
+        NS = Loader.LoadModules({
+            "IlvlTooltip_Constants.lua",
+            "IlvlTooltip_Cache.lua",
+            "IlvlTooltip_Inspect.lua",
+        })
+
+        cache = NS.CreateCache()
+        visibleUpdates = {}
+
+        inspect = NS.CreateInspectOrchestrator({
+            cache = cache,
+            isInspectableUnit = isInspectableUnit,
+            resolveBestUnitTokenForGuid = resolveBestUnitTokenForGuid,
+            onVisibleUpdate = function(...)
+                visibleUpdates[#visibleUpdates + 1] = { ... }
+            end,
+        })
+    end)
+
+    it("deduplicates repeated requests for the same guid", function()
+        local guid = "Player-1-00000011"
+        env:setUnit("target", {
+            guid = guid,
+            isPlayer = true,
+            canInspect = true,
+            inRange = true,
+        })
+
+        assert.is_true(inspect.Request("target", guid))
+        assert.is_false(inspect.Request("target", guid))
+        assert.are.equal(1, #env.inspectRequests)
+    end)
+
+    it("writes successful inspect results to cache", function()
+        local guid = "Player-1-00000012"
+        env:setUnit("target", {
+            guid = guid,
+            isPlayer = true,
+            canInspect = true,
+            inRange = true,
+        })
+        env:setInspectItemLevelFn(function()
+            return nil, 640
+        end)
+
+        assert.is_true(inspect.Request("target", guid))
+        inspect.OnInspectReady(guid)
+
+        local text, _, _, _, hasValue, state = cache.GetDisplay(guid)
+        assert.is_true(hasValue)
+        assert.are.equal("640.0", text)
+        assert.are.equal("fresh", state)
+        assert.is_false(inspect.IsWaiting())
+        assert.are.equal(1, env.clearInspectCalls)
+    end)
+
+    it("recovers from timeout and enters backoff", function()
+        local guid = "Player-1-00000013"
+        env:setUnit("target", {
+            guid = guid,
+            isPlayer = true,
+            canInspect = true,
+            inRange = true,
+        })
+        env:setInspectItemLevelFn(function()
+            return nil, nil
+        end)
+
+        assert.is_true(inspect.Request("target", guid))
+        env:advance(NS.Constants.INSPECT_TIMEOUT + 0.1)
+
+        assert.is_false(inspect.IsWaiting())
+        assert.are.equal("Unavailable", visibleUpdates[#visibleUpdates][2])
+        local inBackoff = cache.IsInFailureBackoff(guid)
+        assert.is_true(inBackoff)
+    end)
+
+    it("processes queued requests after cooldown", function()
+        local guidA = "Player-1-00000014"
+        local guidB = "Player-1-00000015"
+
+        env:setUnit("target", {
+            guid = guidA,
+            isPlayer = true,
+            canInspect = true,
+            inRange = true,
+        })
+        env:setUnit("focus", {
+            guid = guidB,
+            isPlayer = true,
+            canInspect = true,
+            inRange = true,
+        })
+        env:setInspectItemLevelFn(function()
+            return nil, 625
+        end)
+
+        assert.is_true(inspect.Request("target", guidA))
+        assert.is_true(inspect.Request("focus", guidB))
+        assert.are.equal(1, #env.inspectRequests)
+
+        inspect.OnInspectReady(guidA)
+        assert.are.equal(1, #env.inspectRequests)
+
+        env:advance(NS.Constants.INSPECT_COOLDOWN + 0.1)
+        assert.are.equal(2, #env.inspectRequests)
+    end)
+end)

@@ -1,0 +1,29 @@
+name: Tests
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  busted:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Lua and Luarocks
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y lua5.4 liblua5.4-dev luarocks libncurses-dev
+          sudo update-alternatives --install /usr/bin/lua lua /usr/bin/lua5.4 100
+          lua -v
+          luarocks --version
+
+      - name: Install test dependencies
+        run: |
+          sudo luarocks --lua-version=5.4 install busted
+
+      - name: Run tests
+        run: |
+          busted --verbose
