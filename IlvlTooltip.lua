@@ -7,15 +7,19 @@ local RETRY_DELAY = 0.15
 local MAX_RETRIES = 8
 local FAILURE_BACKOFF_BASE = 2
 local FAILURE_BACKOFF_MAX = 15
+local CACHE_SWEEP_INTERVAL = 30
 
 local cache = {}
 local inspectQueue = {}
+local queueHead = 1
+local queueTail = 0
 local queuedGuids = {}
 local pendingUnit, pendingGuid
 local waitingForInspect = false
 local lastInspectTime = 0
 local throttleTimer = nil
 local pendingTimeoutTimer = nil
+local lastCacheSweepAt = 0
 local processQueue
 local getBestUnitTokenForGuid
 
@@ -43,7 +47,6 @@ local function setTooltipLine(tooltip, message, r, g, b)
                 if startsWith(text, ADDON_PREFIX) then
                     line:SetText(lineText)
                     line:SetTextColor(r or 1, g or 0.82, b or 0)
-                    tooltip:Show()
                     return
                 end
             end
@@ -51,7 +54,9 @@ local function setTooltipLine(tooltip, message, r, g, b)
     end
 
     tooltip:AddLine(lineText, r or 1, g or 0.82, b or 0)
-    tooltip:Show()
+    if tooltip:IsShown() then
+        tooltip:Show()
+    end
 end
 
 local function ensureCacheEntry(guid)
@@ -139,6 +144,35 @@ local function isInFailureBackoff(guid)
     end
 
     return false, 0
+end
+
+local function sweepCacheIfNeeded(force)
+    local now = GetTime()
+    if not force and (now - lastCacheSweepAt) < CACHE_SWEEP_INTERVAL then
+        return
+    end
+
+    lastCacheSweepAt = now
+
+    for guid, entry in pairs(cache) do
+        if guid ~= pendingGuid and not queuedGuids[guid] then
+            local hardExpireAt = entry.hardExpireAt or 0
+            local hardExpired = hardExpireAt > 0 and now > hardExpireAt
+
+            local inBackoff = false
+            if (entry.failCount or 0) > 0 and entry.lastStatus ~= "ok" and entry.lastStatus ~= "pending" then
+                local backoff = getFailureBackoff(entry.failCount)
+                inBackoff = (now - (entry.lastAttemptAt or 0)) < backoff
+            end
+
+            local hasIlvl = entry.ilvl and entry.ilvl > 0
+            if hardExpired and not inBackoff then
+                cache[guid] = nil
+            elseif not hasIlvl and not inBackoff and entry.lastStatus ~= "pending" then
+                cache[guid] = nil
+            end
+        end
+    end
 end
 
 local function markInspectAttempt(guid)
@@ -230,12 +264,8 @@ local function updateVisibleTooltip(guid, fallbackMessage, r, g, b)
         return
     end
 
-    local _, unit = GameTooltip:GetUnit()
-    if (not unit or not UnitExists(unit)) and UnitExists("mouseover") and UnitGUID("mouseover") == guid then
-        unit = "mouseover"
-    end
-
-    if unit and UnitExists(unit) and UnitGUID(unit) ~= guid then
+    local currentUnit, currentGuid = resolveTooltipUnitAndGuid(GameTooltip)
+    if not currentGuid or currentGuid ~= guid then
         return
     end
 
@@ -245,7 +275,7 @@ local function updateVisibleTooltip(guid, fallbackMessage, r, g, b)
         return
     end
 
-    if waitingForInspect and pendingGuid == guid and unit and UnitExists(unit) then
+    if waitingForInspect and pendingGuid == guid and currentUnit and UnitExists(currentUnit) then
         setTooltipLine(GameTooltip, "Inspecting...", 1, 0.82, 0)
         return
     end
@@ -379,11 +409,13 @@ local function startInspect(unit, guid)
 end
 
 processQueue = function()
+    sweepCacheIfNeeded(false)
+
     if waitingForInspect then
         return
     end
 
-    if #inspectQueue == 0 then
+    if queueHead > queueTail then
         return
     end
 
@@ -399,8 +431,16 @@ processQueue = function()
         return
     end
 
-    while #inspectQueue > 0 do
-        local request = table.remove(inspectQueue, 1)
+    while queueHead <= queueTail do
+        local request = inspectQueue[queueHead]
+        inspectQueue[queueHead] = nil
+        queueHead = queueHead + 1
+
+        if queueHead > queueTail then
+            queueHead = 1
+            queueTail = 0
+        end
+
         queuedGuids[request.guid] = nil
 
         local backoffActive = isInFailureBackoff(request.guid)
@@ -418,7 +458,8 @@ local function enqueueInspect(unit, guid)
         return false
     end
 
-    inspectQueue[#inspectQueue + 1] = { unit = unit, guid = guid }
+    queueTail = queueTail + 1
+    inspectQueue[queueTail] = { unit = unit, guid = guid }
     queuedGuids[guid] = true
     processQueue()
     return true
@@ -479,6 +520,8 @@ local function onTooltipSetUnit(tooltip, data)
     if not tooltip then
         return
     end
+
+    sweepCacheIfNeeded(false)
 
     local unit, guid = resolveTooltipUnitAndGuid(tooltip, data)
     if not guid then
