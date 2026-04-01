@@ -8,12 +8,15 @@ local MAX_RETRIES = 8
 local FAILURE_BACKOFF_BASE = 2
 local FAILURE_BACKOFF_MAX = 15
 local CACHE_SWEEP_INTERVAL = 30
+local GUID_FALLBACK_UNITS = { "mouseover", "target", "focus" }
 
 local cache = {}
 local inspectQueue = {}
 local queueHead = 1
 local queueTail = 0
 local queuedGuids = {}
+local tooltipLineCache = setmetatable({}, { __mode = "k" })
+local tooltipRenderState = setmetatable({}, { __mode = "k" })
 local pendingUnit, pendingGuid
 local waitingForInspect = false
 local lastInspectTime = 0
@@ -30,12 +33,45 @@ local function startsWith(text, prefix)
     return text and prefix and text:sub(1, #prefix) == prefix
 end
 
-local function setTooltipLine(tooltip, message, r, g, b)
+local function setTooltipLine(tooltip, guid, message, r, g, b)
     if not tooltip then
         return
     end
 
+    local red = r or 1
+    local green = g or 0.82
+    local blue = b or 0
     local lineText = string.format("%s %s", ADDON_PREFIX, message)
+    local cachedLine = tooltipLineCache[tooltip]
+    local renderState = tooltipRenderState[tooltip]
+
+    if renderState and renderState.guid == guid and renderState.text == lineText and renderState.r == red and renderState.g == green and renderState.b == blue then
+        if cachedLine and cachedLine.GetText and cachedLine:GetText() == lineText then
+            return
+        end
+    end
+
+    if cachedLine then
+        local cachedText = cachedLine:GetText()
+        if startsWith(cachedText, ADDON_PREFIX) then
+            cachedLine:SetText(lineText)
+            cachedLine:SetTextColor(red, green, blue)
+
+            if not renderState then
+                renderState = {}
+                tooltipRenderState[tooltip] = renderState
+            end
+            renderState.guid = guid
+            renderState.text = lineText
+            renderState.r = red
+            renderState.g = green
+            renderState.b = blue
+            return
+        end
+
+        tooltipLineCache[tooltip] = nil
+    end
+
     local tooltipName = tooltip:GetName()
     local numLines = tooltip:NumLines()
 
@@ -46,14 +82,42 @@ local function setTooltipLine(tooltip, message, r, g, b)
                 local text = line:GetText()
                 if startsWith(text, ADDON_PREFIX) then
                     line:SetText(lineText)
-                    line:SetTextColor(r or 1, g or 0.82, b or 0)
+                    line:SetTextColor(red, green, blue)
+                    tooltipLineCache[tooltip] = line
+
+                    if not renderState then
+                        renderState = {}
+                        tooltipRenderState[tooltip] = renderState
+                    end
+                    renderState.guid = guid
+                    renderState.text = lineText
+                    renderState.r = red
+                    renderState.g = green
+                    renderState.b = blue
                     return
                 end
             end
         end
     end
 
-    tooltip:AddLine(lineText, r or 1, g or 0.82, b or 0)
+    tooltip:AddLine(lineText, red, green, blue)
+    if tooltipName then
+        local lastLine = _G[tooltipName .. "TextLeft" .. tooltip:NumLines()]
+        if lastLine then
+            tooltipLineCache[tooltip] = lastLine
+        end
+    end
+
+    if not renderState then
+        renderState = {}
+        tooltipRenderState[tooltip] = renderState
+    end
+    renderState.guid = guid
+    renderState.text = lineText
+    renderState.r = red
+    renderState.g = green
+    renderState.b = blue
+
     if tooltip:IsShown() then
         tooltip:Show()
     end
@@ -83,7 +147,7 @@ local function ensureCacheEntry(guid)
 end
 
 local function isPlayerGuid(guid)
-    return type(guid) == "string" and guid:match("^Player%-") ~= nil
+    return type(guid) == "string" and guid:sub(1, 7) == "Player-"
 end
 
 local function getCacheState(guid)
@@ -271,17 +335,17 @@ local function updateVisibleTooltip(guid, fallbackMessage, r, g, b)
 
     local cachedText, cr, cg, cb, hasCachedValue = getCachedDisplay(guid)
     if hasCachedValue then
-        setTooltipLine(GameTooltip, cachedText, cr, cg, cb)
+        setTooltipLine(GameTooltip, guid, cachedText, cr, cg, cb)
         return
     end
 
     if waitingForInspect and pendingGuid == guid and currentUnit and UnitExists(currentUnit) then
-        setTooltipLine(GameTooltip, "Inspecting...", 1, 0.82, 0)
+        setTooltipLine(GameTooltip, guid, "Inspecting...", 1, 0.82, 0)
         return
     end
 
     if fallbackMessage then
-        setTooltipLine(GameTooltip, fallbackMessage, r or 1, g or 0.3, b or 0.3)
+        setTooltipLine(GameTooltip, guid, fallbackMessage, r or 1, g or 0.3, b or 0.3)
     end
 end
 
@@ -358,7 +422,8 @@ getBestUnitTokenForGuid = function(guid, fallbackUnit)
         end
     end
 
-    for _, unit in ipairs({ "mouseover", "target", "focus" }) do
+    for i = 1, #GUID_FALLBACK_UNITS do
+        local unit = GUID_FALLBACK_UNITS[i]
         if UnitExists(unit) and UnitGUID(unit) == guid then
             return unit
         end
@@ -535,7 +600,7 @@ local function onTooltipSetUnit(tooltip, data)
     if (unit and UnitExists(unit) and UnitIsUnit(unit, "player")) or guid == UnitGUID("player") then
         local _, equipped = GetAverageItemLevel()
         if equipped and equipped > 0 then
-            setTooltipLine(tooltip, string.format("%.1f", equipped), 0.2, 1, 0.2)
+            setTooltipLine(tooltip, guid, string.format("%.1f", equipped), 0.2, 1, 0.2)
         end
         return
     end
@@ -546,7 +611,7 @@ local function onTooltipSetUnit(tooltip, data)
 
     local cachedText, cr, cg, cb, hasCachedValue, cacheState = getCachedDisplay(guid)
     if hasCachedValue then
-        setTooltipLine(tooltip, cachedText, cr, cg, cb)
+        setTooltipLine(tooltip, guid, cachedText, cr, cg, cb)
     end
 
     local inspectable = isInspectableUnit(unit)
@@ -564,16 +629,16 @@ local function onTooltipSetUnit(tooltip, data)
     end
 
     if pendingOrQueued then
-        setTooltipLine(tooltip, "Inspecting...", 1, 0.82, 0)
+        setTooltipLine(tooltip, guid, "Inspecting...", 1, 0.82, 0)
         return
     end
 
     if unit and UnitExists(unit) and not inspectable then
-        setTooltipLine(tooltip, "Out of range", 1, 0.3, 0.3)
+        setTooltipLine(tooltip, guid, "Out of range", 1, 0.3, 0.3)
         return
     end
 
-    setTooltipLine(tooltip, "Unavailable", 1, 0.3, 0.3)
+    setTooltipLine(tooltip, guid, "Unavailable", 1, 0.3, 0.3)
 end
 
 frame:SetScript("OnEvent", function(_, event, guid)
