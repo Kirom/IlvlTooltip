@@ -2,6 +2,6 @@
 ## Title: iLvl Tooltip
 ## Notes: Adds hovered player item level to the tooltip.
 ## Author: Kirom
-## Version: 1.1.3
+## Version: 1.1.4
 
 IlvlTooltip.lua

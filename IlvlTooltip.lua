@@ -10,6 +10,26 @@ local FAILURE_BACKOFF_MAX = 15
 local CACHE_SWEEP_INTERVAL = 30
 local GUID_FALLBACK_UNITS = { "mouseover", "target", "focus" }
 
+local GetTime = GetTime
+local UnitExists = UnitExists
+local UnitGUID = UnitGUID
+local UnitIsPlayer = UnitIsPlayer
+local UnitIsUnit = UnitIsUnit
+local CanInspect = CanInspect
+local CheckInteractDistance = CheckInteractDistance
+local GetAverageItemLevel = GetAverageItemLevel
+local GetDetailedItemLevelInfo = GetDetailedItemLevelInfo
+local GetInventoryItemLink = GetInventoryItemLink
+local UnitTokenFromGUID = UnitTokenFromGUID
+local NotifyInspect = NotifyInspect
+local ClearInspectPlayer = ClearInspectPlayer
+local WorldFrame = WorldFrame
+local GameTooltip = GameTooltip
+local C_Timer = C_Timer
+local C_PaperDollInfo = C_PaperDollInfo
+local TooltipDataProcessor = TooltipDataProcessor
+local Enum = Enum
+
 local cache = {}
 local inspectQueue = {}
 local queueHead = 1
@@ -41,7 +61,7 @@ local function setTooltipLine(tooltip, guid, message, r, g, b)
     local red = r or 1
     local green = g or 0.82
     local blue = b or 0
-    local lineText = string.format("%s %s", ADDON_PREFIX, message)
+    local lineText = ADDON_PREFIX .. " " .. message
     local cachedLine = tooltipLineCache[tooltip]
     local renderState = tooltipRenderState[tooltip]
 
