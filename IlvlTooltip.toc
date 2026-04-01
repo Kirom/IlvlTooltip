@@ -1,0 +1,7 @@
+## Interface: 120001
+## Title: iLvl Tooltip
+## Notes: Adds hovered player item level to the tooltip.
+## Author: Codex
+## Version: 1.1.1
+
+IlvlTooltip.lua
