@@ -152,7 +152,7 @@ function Controller.Start()
                 end
             end
 
-            if not fastPathHit and inspect.Request(unit, guid) then
+            if not fastPathHit and inspect.Request(unit, guid, { priority = true }) then
                 pendingOrQueued = true
             end
         end

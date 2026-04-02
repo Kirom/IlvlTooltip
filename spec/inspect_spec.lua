@@ -201,4 +201,78 @@ describe("IlvlTooltip inspect orchestrator", function()
         env:advance(NS.Constants.INSPECT_COOLDOWN + 0.1)
         assert.are.equal(2, #env.inspectRequests)
     end)
+
+    it("prioritizes tooltip requests over queued background requests", function()
+        local guidA = "Player-1-00000019"
+        local guidB = "Player-1-00000020"
+        local guidC = "Player-1-00000021"
+
+        env:setUnit("target", {
+            guid = guidA,
+            isPlayer = true,
+            canInspect = true,
+            inRange = true,
+        })
+        env:setUnit("focus", {
+            guid = guidB,
+            isPlayer = true,
+            canInspect = true,
+            inRange = true,
+        })
+        env:setUnit("mouseover", {
+            guid = guidC,
+            isPlayer = true,
+            canInspect = true,
+            inRange = true,
+        })
+        env:setInspectItemLevelFn(function()
+            return nil, 628
+        end)
+
+        assert.is_true(inspect.Request("target", guidA))
+        assert.is_true(inspect.Request("focus", guidB))
+        assert.is_true(inspect.Request("mouseover", guidC, { priority = true }))
+        assert.are.equal("target", env.inspectRequests[1])
+
+        inspect.OnInspectReady(guidA)
+        env:advance(NS.Constants.INSPECT_COOLDOWN + 0.1)
+        assert.are.equal("mouseover", env.inspectRequests[2])
+    end)
+
+    it("promotes an already queued guid to priority", function()
+        local guidA = "Player-1-00000022"
+        local guidB = "Player-1-00000023"
+        local guidC = "Player-1-00000024"
+
+        env:setUnit("target", {
+            guid = guidA,
+            isPlayer = true,
+            canInspect = true,
+            inRange = true,
+        })
+        env:setUnit("focus", {
+            guid = guidB,
+            isPlayer = true,
+            canInspect = true,
+            inRange = true,
+        })
+        env:setUnit("mouseover", {
+            guid = guidC,
+            isPlayer = true,
+            canInspect = true,
+            inRange = true,
+        })
+        env:setInspectItemLevelFn(function()
+            return nil, 626
+        end)
+
+        assert.is_true(inspect.Request("target", guidA))
+        assert.is_true(inspect.Request("focus", guidB))
+        assert.is_true(inspect.Request("mouseover", guidC))
+        assert.is_true(inspect.Request("mouseover", guidC, { priority = true }))
+
+        inspect.OnInspectReady(guidA)
+        env:advance(NS.Constants.INSPECT_COOLDOWN + 0.1)
+        assert.are.equal("mouseover", env.inspectRequests[2])
+    end)
 end)

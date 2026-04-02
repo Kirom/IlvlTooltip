@@ -15,7 +15,7 @@ function NS.CreateInspectOrchestrator(deps)
     local inspectQueue = {}
     local queueHead = 1
     local queueTail = 0
-    local queuedGuids = {}
+    local queuedEntriesByGuid = {}
     local pendingUnit, pendingGuid
     local waitingForInspect = false
     local lastInspectTime = 0
@@ -57,6 +57,25 @@ function NS.CreateInspectOrchestrator(deps)
             return
         end
         fn()
+    end
+
+    local function resetQueueIndicesIfEmpty()
+        if queueHead > queueTail then
+            queueHead = 1
+            queueTail = 0
+        end
+    end
+
+    local function enqueueAtBack(request)
+        resetQueueIndicesIfEmpty()
+        queueTail = queueTail + 1
+        inspectQueue[queueTail] = request
+    end
+
+    local function enqueueAtFront(request)
+        resetQueueIndicesIfEmpty()
+        queueHead = queueHead - 1
+        inspectQueue[queueHead] = request
     end
 
     local function tryBuiltInInspectItemLevel(unit)
@@ -134,7 +153,7 @@ function NS.CreateInspectOrchestrator(deps)
         if not guid then
             return false
         end
-        return (waitingForInspect and pendingGuid == guid) or queuedGuids[guid] == true
+        return (waitingForInspect and pendingGuid == guid) or queuedEntriesByGuid[guid] ~= nil
     end
 
     function service.IsGuidProtected(guid)
@@ -247,36 +266,68 @@ function NS.CreateInspectOrchestrator(deps)
             inspectQueue[queueHead] = nil
             queueHead = queueHead + 1
 
-            if queueHead > queueTail then
-                queueHead = 1
-                queueTail = 0
+            if request and not request.cancelled then
+                if queuedEntriesByGuid[request.guid] == request then
+                    queuedEntriesByGuid[request.guid] = nil
+                end
+
+                local backoffActive = cache.IsInFailureBackoff(request.guid)
+                local bestUnit = resolveBestUnitTokenForGuid(request.guid, request.unit)
+                if not backoffActive and isInspectableUnit(bestUnit) then
+                    resetQueueIndicesIfEmpty()
+                    startInspect(bestUnit, request.guid)
+                    return
+                end
             end
 
-            queuedGuids[request.guid] = nil
-
-            local backoffActive = cache.IsInFailureBackoff(request.guid)
-            local bestUnit = resolveBestUnitTokenForGuid(request.guid, request.unit)
-            if not backoffActive and isInspectableUnit(bestUnit) then
-                startInspect(bestUnit, request.guid)
-                return
-            end
+            resetQueueIndicesIfEmpty()
         end
     end
 
-    local function enqueueInspect(unit, guid)
-        if not guid or service.IsPendingOrQueued(guid) then
+    local function enqueueInspect(unit, guid, priority)
+        if not guid or (waitingForInspect and pendingGuid == guid) then
             return false
         end
 
-        queueTail = queueTail + 1
-        inspectQueue[queueTail] = { unit = unit, guid = guid }
-        queuedGuids[guid] = true
+        local existing = queuedEntriesByGuid[guid]
+        if existing then
+            if not (priority and not existing.priority) then
+                return false
+            end
+            existing.cancelled = true
+        end
+
+        local request = {
+            unit = unit,
+            guid = guid,
+            priority = priority == true,
+            cancelled = false,
+        }
+        queuedEntriesByGuid[guid] = request
+
+        if request.priority then
+            enqueueAtFront(request)
+        else
+            enqueueAtBack(request)
+        end
+
         processQueue()
         return true
     end
 
-    function service.Request(unit, guid)
+    function service.Request(unit, guid, options)
         if not guid or service.IsPendingOrQueued(guid) then
+            local requestedPriority = false
+            if type(options) == "table" then
+                requestedPriority = options.priority == true
+            elseif options == true then
+                requestedPriority = true
+            end
+
+            if requestedPriority then
+                return enqueueInspect(unit, guid, true)
+            end
+
             return false
         end
 
@@ -285,7 +336,14 @@ function NS.CreateInspectOrchestrator(deps)
             return false
         end
 
-        return enqueueInspect(unit, guid)
+        local priority = false
+        if type(options) == "table" then
+            priority = options.priority == true
+        elseif options == true then
+            priority = true
+        end
+
+        return enqueueInspect(unit, guid, priority)
     end
 
     resolveInspectWithRetry = function(guid, unit, attempt)
