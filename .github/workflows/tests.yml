@@ -16,7 +16,14 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y lua5.4 liblua5.4-dev luarocks libncurses-dev
-          sudo update-alternatives --install /usr/bin/lua lua /usr/bin/lua5.4 100
+          if update-alternatives --query lua-interpreter > /dev/null 2>&1; then
+            sudo update-alternatives --set lua-interpreter /usr/bin/lua5.4
+          elif update-alternatives --query lua > /dev/null 2>&1; then
+            sudo update-alternatives --set lua /usr/bin/lua5.4
+          fi
+          if update-alternatives --query luac-compiler > /dev/null 2>&1; then
+            sudo update-alternatives --set luac-compiler /usr/bin/luac5.4
+          fi
           lua -v
           luarocks --version
 
