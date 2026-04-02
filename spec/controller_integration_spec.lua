@@ -11,7 +11,7 @@ describe("IlvlTooltip controller integration", function()
         NS = Loader.LoadAll()
     end)
 
-    it("renders inspected ilvl on unit tooltip", function()
+    it("renders ilvl on unit tooltip immediately when inspect data is already loaded", function()
         local guid = "Player-1-00000031"
         env:setUnit("target", {
             guid = guid,
@@ -25,7 +25,8 @@ describe("IlvlTooltip controller integration", function()
         end)
 
         env:fireUnitTooltip(env.gameTooltip, { guid = guid })
-        assert.are.equal("iLvl: Inspecting...", env.gameTooltip:GetLineText(1))
+        assert.are.equal("iLvl: 638.0", env.gameTooltip:GetLineText(1))
+        assert.are.equal(0, #env.inspectRequests)
 
         env:fireEvent("INSPECT_READY", guid)
         assert.are.equal("iLvl: 638.0", env.gameTooltip:GetLineText(1))
@@ -54,7 +55,7 @@ describe("IlvlTooltip controller integration", function()
         assert.are.equal(0, #env.inspectRequests)
     end)
 
-    it("keeps stale cache visible and requests refresh in warm state", function()
+    it("refreshes warm cache immediately via fast path when inspect data is loaded", function()
         local guid = "Player-1-00000032"
         env:setUnit("target", {
             guid = guid,
@@ -68,8 +69,8 @@ describe("IlvlTooltip controller integration", function()
             return nil, 620
         end)
         env:fireUnitTooltip(env.gameTooltip, { guid = guid })
-        env:fireEvent("INSPECT_READY", guid)
         assert.are.equal("iLvl: 620.0", env.gameTooltip:GetLineText(1))
+        assert.are.equal(0, #env.inspectRequests)
 
         env:advance(NS.Constants.HOT_CACHE_TTL + 1)
         env:setInspectItemLevelFn(function()
@@ -77,9 +78,8 @@ describe("IlvlTooltip controller integration", function()
         end)
         env:fireUnitTooltip(env.gameTooltip, { guid = guid })
 
-        local lineText = env.gameTooltip:GetLineText(1)
-        assert.is_true(lineText:find("(stale)", 1, true) ~= nil)
-        assert.is_true(#env.inspectRequests >= 2)
+        assert.are.equal("iLvl: 622.0", env.gameTooltip:GetLineText(1))
+        assert.are.equal(0, #env.inspectRequests)
     end)
 
     it("prefetches target on event and serves cached ilvl on first tooltip", function()
@@ -140,7 +140,8 @@ describe("IlvlTooltip controller integration", function()
         end)
 
         env:fireUnitTooltip(env.gameTooltip, { guid = guid })
-        assert.are.equal("iLvl: Inspecting...", env.gameTooltip:GetLineText(1))
+        assert.are.equal("iLvl: 639.0", env.gameTooltip:GetLineText(1))
+        assert.are.equal(0, #env.inspectRequests)
 
         env.gameTooltip:SetUnit(nil)
         env:fireEvent("INSPECT_READY", guid)
@@ -167,7 +168,8 @@ describe("IlvlTooltip controller integration", function()
         end)
 
         env.gameTooltip:FireScript("OnTooltipSetUnit")
-        assert.are.equal("iLvl: Inspecting...", env.gameTooltip:GetLineText(1))
+        assert.are.equal("iLvl: 641.0", env.gameTooltip:GetLineText(1))
+        assert.are.equal(0, #env.inspectRequests)
 
         env:fireEvent("INSPECT_READY", guid)
         assert.are.equal("iLvl: 641.0", env.gameTooltip:GetLineText(1))
