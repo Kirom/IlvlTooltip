@@ -166,7 +166,11 @@ function NS.CreateTooltipView()
     end
 
     function service.ResolveTooltipUnitAndGuid(tooltip, data)
-        local _, unit = tooltip.GetUnit and tooltip:GetUnit() or nil
+        local unit
+        if tooltip and tooltip.GetUnit then
+            local _, tooltipUnit = tooltip:GetUnit()
+            unit = tooltipUnit
+        end
         if not Safe.UnitExists(unit) then
             unit = nil
         end
