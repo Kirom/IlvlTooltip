@@ -33,6 +33,9 @@ function Controller.Start()
         end
 
         local currentUnit, currentGuid = tooltipView.ResolveTooltipUnitAndGuid(gameTooltip)
+        if not currentGuid then
+            currentGuid = tooltipView.GetRenderedGuid(gameTooltip)
+        end
         if not currentGuid or currentGuid ~= guid then
             return
         end
@@ -59,6 +62,44 @@ function Controller.Start()
         resolveBestUnitTokenForGuid = tooltipView.ResolveBestUnitTokenForGuid,
         onVisibleUpdate = updateVisibleTooltip,
     })
+
+    local function shouldRefreshCacheState(cacheState)
+        return cacheState == "none" or cacheState == "warm" or cacheState == "expired"
+    end
+
+    local function prefetchUnit(unit)
+        if not unit or not API.UnitExists(unit) or not API.UnitIsPlayer(unit) then
+            return
+        end
+
+        local guid = API.UnitGUID(unit)
+        if not guid or not cache.IsPlayerGuid(guid) then
+            return
+        end
+
+        if API.UnitIsUnit and API.UnitIsUnit(unit, "player") then
+            return
+        end
+
+        local _, cacheState = cache.GetState(guid)
+        if cacheState ~= "none" and cacheState ~= "expired" then
+            return
+        end
+
+        if cache.IsInFailureBackoff(guid) or inspect.IsPendingOrQueued(guid) then
+            return
+        end
+
+        if not isInspectableUnit(unit) then
+            return
+        end
+
+        if inspect.TryReadLoadedItemLevel(unit, guid) then
+            return
+        end
+
+        inspect.Request(unit, guid)
+    end
 
     local function onTooltipSetUnit(tooltip, data)
         if not tooltip then
@@ -97,8 +138,21 @@ function Controller.Start()
         local backoffActive = cache.IsInFailureBackoff(guid)
         local pendingOrQueued = inspect.IsPendingOrQueued(guid)
 
-        if inspectable and not backoffActive and (cacheState == "none" or cacheState == "warm" or cacheState == "expired") then
-            if inspect.Request(unit, guid) then
+        if inspectable and not backoffActive and shouldRefreshCacheState(cacheState) then
+            local fastPathHit = false
+
+            if not pendingOrQueued then
+                fastPathHit = inspect.TryReadLoadedItemLevel(unit, guid)
+                if fastPathHit then
+                    cachedText, cr, cg, cb, hasCachedValue = cache.GetDisplay(guid)
+                    if hasCachedValue then
+                        tooltipView.SetTooltipLine(tooltip, guid, cachedText, cr, cg, cb)
+                    end
+                    pendingOrQueued = false
+                end
+            end
+
+            if not fastPathHit and inspect.Request(unit, guid) then
                 pendingOrQueued = true
             end
         end
@@ -123,9 +177,21 @@ function Controller.Start()
     local frame = API.CreateFrame and API.CreateFrame("Frame")
     if frame then
         frame:RegisterEvent("INSPECT_READY")
+        frame:RegisterEvent("UPDATE_MOUSEOVER_UNIT")
+        frame:RegisterEvent("PLAYER_TARGET_CHANGED")
         frame:SetScript("OnEvent", function(_, event, guid)
             if event == "INSPECT_READY" then
                 inspect.OnInspectReady(guid)
+                return
+            end
+
+            if event == "UPDATE_MOUSEOVER_UNIT" then
+                prefetchUnit("mouseover")
+                return
+            end
+
+            if event == "PLAYER_TARGET_CHANGED" then
+                prefetchUnit("target")
             end
         end)
     end

@@ -107,6 +107,39 @@ function NS.CreateTooltipView()
         end
     end
 
+    function service.GetRenderedGuid(tooltip)
+        if not tooltip then
+            return nil
+        end
+
+        local renderState = tooltipRenderState[tooltip]
+        if not renderState or not renderState.guid then
+            return nil
+        end
+
+        local cachedLine = tooltipLineCache[tooltip]
+        if cachedLine and cachedLine.GetText and startsWith(cachedLine:GetText(), C.ADDON_PREFIX) then
+            return renderState.guid
+        end
+
+        local tooltipName = tooltip:GetName()
+        local numLines = tooltip:NumLines()
+        if tooltipName and numLines and numLines > 0 then
+            for i = 1, numLines do
+                local line = _G[tooltipName .. "TextLeft" .. i]
+                if line then
+                    local text = line:GetText()
+                    if startsWith(text, C.ADDON_PREFIX) then
+                        tooltipLineCache[tooltip] = line
+                        return renderState.guid
+                    end
+                end
+            end
+        end
+
+        return nil
+    end
+
     function service.ResolveBestUnitTokenForGuid(guid, fallbackUnit)
         if fallbackUnit and API.UnitExists(fallbackUnit) and API.UnitGUID(fallbackUnit) == guid then
             return fallbackUnit

@@ -84,6 +84,72 @@ describe("IlvlTooltip inspect orchestrator", function()
         assert.are.equal(1, env.clearInspectCalls)
     end)
 
+    it("resolves loaded inspect data without NotifyInspect via fast path", function()
+        local guid = "Player-1-00000016"
+        env:setUnit("target", {
+            guid = guid,
+            isPlayer = true,
+            canInspect = true,
+            inRange = true,
+        })
+        env:setInspectItemLevelFn(function()
+            return nil, 631
+        end)
+
+        local hit = inspect.TryReadLoadedItemLevel("target", guid)
+        assert.is_true(hit)
+        assert.are.equal(0, #env.inspectRequests)
+
+        local text, _, _, _, hasValue = cache.GetDisplay(guid)
+        assert.is_true(hasValue)
+        assert.are.equal("631.0", text)
+    end)
+
+    it("completes inspect from early probe before INSPECT_READY", function()
+        local guid = "Player-1-00000017"
+        env:setUnit("target", {
+            guid = guid,
+            isPlayer = true,
+            canInspect = true,
+            inRange = true,
+        })
+        env:setInspectItemLevelFn(function()
+            if env.now >= NS.Constants.EARLY_PROBE_DELAY then
+                return nil, 642
+            end
+            return nil, nil
+        end)
+
+        assert.is_true(inspect.Request("target", guid))
+        assert.are.equal(1, #env.inspectRequests)
+
+        env:advance(NS.Constants.EARLY_PROBE_DELAY + 0.05)
+
+        local text, _, _, _, hasValue = cache.GetDisplay(guid)
+        assert.is_true(hasValue)
+        assert.are.equal("642.0", text)
+        assert.is_false(inspect.IsWaiting())
+        assert.are.equal(1, env.clearInspectCalls)
+    end)
+
+    it("does not mutate cache via fast path while inspect is pending for the same guid", function()
+        local guid = "Player-1-00000018"
+        env:setUnit("target", {
+            guid = guid,
+            isPlayer = true,
+            canInspect = true,
+            inRange = true,
+        })
+        env:setInspectItemLevelFn(function()
+            return nil, 650
+        end)
+
+        assert.is_true(inspect.Request("target", guid))
+        local hit = inspect.TryReadLoadedItemLevel("target", guid)
+        assert.is_false(hit)
+        assert.are.equal(1, #env.inspectRequests)
+    end)
+
     it("recovers from timeout and enters backoff", function()
         local guid = "Player-1-00000013"
         env:setUnit("target", {

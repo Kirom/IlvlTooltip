@@ -21,10 +21,12 @@ function NS.CreateInspectOrchestrator(deps)
     local lastInspectTime = 0
     local throttleTimer = nil
     local pendingTimeoutTimer = nil
+    local inspectAttemptSerial = 0
 
     local service = {}
     local processQueue
     local resolveInspectWithRetry
+    local completeSuccessfulInspect
 
     local function cancelPendingTimeout()
         if pendingTimeoutTimer and pendingTimeoutTimer.Cancel then
@@ -116,6 +118,18 @@ function NS.CreateInspectOrchestrator(deps)
         return total / count, missingData
     end
 
+    local function tryReadLoadedItemLevel(unit, guid)
+        local bestUnit = resolveBestUnitTokenForGuid(guid, unit)
+        local ilvl = tryBuiltInInspectItemLevel(bestUnit)
+        local missingData = false
+
+        if not ilvl then
+            ilvl, missingData = tryManualInspectItemLevel(bestUnit)
+        end
+
+        return ilvl, missingData, bestUnit
+    end
+
     function service.IsPendingOrQueued(guid)
         if not guid then
             return false
@@ -135,16 +149,65 @@ function NS.CreateInspectOrchestrator(deps)
         return pendingGuid
     end
 
+    function service.TryReadLoadedItemLevel(unit, guid)
+        if not guid then
+            return false
+        end
+
+        if waitingForInspect and pendingGuid == guid then
+            return false
+        end
+
+        local ilvl = tryReadLoadedItemLevel(unit, guid)
+        if not ilvl then
+            return false
+        end
+
+        cache.MarkSuccess(guid, ilvl)
+        return true, ilvl
+    end
+
+    completeSuccessfulInspect = function(guid, ilvl)
+        cache.MarkSuccess(guid, ilvl)
+        finishInspect()
+        onVisibleUpdate(guid)
+        processQueue()
+    end
+
+    local function scheduleEarlyProbe(guid, attemptSerial, attempt)
+        if attempt > C.EARLY_PROBE_ATTEMPTS then
+            return
+        end
+
+        scheduleAfter(C.EARLY_PROBE_DELAY, function()
+            if not waitingForInspect or pendingGuid ~= guid or inspectAttemptSerial ~= attemptSerial then
+                return
+            end
+
+            local ilvl = tryReadLoadedItemLevel(pendingUnit, guid)
+            if ilvl then
+                completeSuccessfulInspect(guid, ilvl)
+                return
+            end
+
+            scheduleEarlyProbe(guid, attemptSerial, attempt + 1)
+        end)
+    end
+
     local function startInspect(unit, guid)
         cancelPendingTimeout()
         waitingForInspect = true
         pendingUnit = unit
         pendingGuid = guid
+        inspectAttemptSerial = inspectAttemptSerial + 1
+        local currentAttemptSerial = inspectAttemptSerial
         cache.MarkAttempt(guid)
         lastInspectTime = API.GetTime()
         if API.NotifyInspect then
             API.NotifyInspect(unit)
         end
+
+        scheduleEarlyProbe(guid, currentAttemptSerial, 1)
 
         pendingTimeoutTimer = scheduleTimer(C.INSPECT_TIMEOUT, function()
             if waitingForInspect and pendingGuid == guid then
@@ -230,19 +293,10 @@ function NS.CreateInspectOrchestrator(deps)
             return
         end
 
-        local bestUnit = resolveBestUnitTokenForGuid(guid, unit)
-        local ilvl = tryBuiltInInspectItemLevel(bestUnit)
-        local missingData = false
-
-        if not ilvl then
-            ilvl, missingData = tryManualInspectItemLevel(bestUnit)
-        end
+        local ilvl, missingData, bestUnit = tryReadLoadedItemLevel(unit, guid)
 
         if ilvl then
-            cache.MarkSuccess(guid, ilvl)
-            finishInspect()
-            onVisibleUpdate(guid)
-            processQueue()
+            completeSuccessfulInspect(guid, ilvl)
             return
         end
 
