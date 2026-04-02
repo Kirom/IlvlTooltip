@@ -41,7 +41,7 @@ describe("IlvlTooltip cache service", function()
 
         local text, _, _, _, hasValue, state = cache.GetDisplay(guid)
         assert.is_true(hasValue)
-        assert.is_true(text:find("%(stale%)", 1, true) ~= nil)
+        assert.is_true(text:find("(stale)", 1, true) ~= nil)
         assert.are.equal("warm", state)
     end)
 

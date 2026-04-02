@@ -18,7 +18,7 @@ function NS.CreateInspectOrchestrator(deps)
     local queuedEntriesByGuid = {}
     local pendingUnit, pendingGuid
     local waitingForInspect = false
-    local lastInspectTime = 0
+    local lastInspectTime = -(C.INSPECT_COOLDOWN or 0)
     local throttleTimer = nil
     local pendingTimeoutTimer = nil
     local inspectAttemptSerial = 0

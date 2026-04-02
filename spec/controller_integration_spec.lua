@@ -55,7 +55,7 @@ describe("IlvlTooltip controller integration", function()
         env:fireUnitTooltip(env.gameTooltip, { guid = guid })
 
         local lineText = env.gameTooltip:GetLineText(1)
-        assert.is_true(lineText:find("%(stale%)", 1, true) ~= nil)
+        assert.is_true(lineText:find("(stale)", 1, true) ~= nil)
         assert.is_true(#env.inspectRequests >= 2)
     end)
 

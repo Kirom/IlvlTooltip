@@ -94,10 +94,6 @@ function Controller.Start()
             return
         end
 
-        if inspect.TryReadLoadedItemLevel(unit, guid) then
-            return
-        end
-
         inspect.Request(unit, guid)
     end
 
@@ -139,20 +135,7 @@ function Controller.Start()
         local pendingOrQueued = inspect.IsPendingOrQueued(guid)
 
         if inspectable and not backoffActive and shouldRefreshCacheState(cacheState) then
-            local fastPathHit = false
-
-            if not pendingOrQueued then
-                fastPathHit = inspect.TryReadLoadedItemLevel(unit, guid)
-                if fastPathHit then
-                    cachedText, cr, cg, cb, hasCachedValue = cache.GetDisplay(guid)
-                    if hasCachedValue then
-                        tooltipView.SetTooltipLine(tooltip, guid, cachedText, cr, cg, cb)
-                    end
-                    pendingOrQueued = false
-                end
-            end
-
-            if not fastPathHit and inspect.Request(unit, guid, { priority = true }) then
+            if not pendingOrQueued and inspect.Request(unit, guid, { priority = true }) then
                 pendingOrQueued = true
             end
         end
