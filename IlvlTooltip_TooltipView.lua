@@ -4,8 +4,10 @@ IlvlTooltip = NS
 local C = NS.Constants
 local API = NS.Api
 
+local pcall = pcall
 local setmetatable = setmetatable
 local string_sub = string.sub
+local type = type
 
 function NS.CreateTooltipView()
     local tooltipLineCache = setmetatable({}, { __mode = "k" })
@@ -15,6 +17,52 @@ function NS.CreateTooltipView()
 
     local function startsWith(text, prefix)
         return text and prefix and string_sub(text, 1, #prefix) == prefix
+    end
+
+    local function safeUnitExists(unit)
+        if type(unit) ~= "string" then
+            return false
+        end
+
+        local ok, exists = pcall(API.UnitExists, unit)
+        return ok and exists == true
+    end
+
+    local function safeUnitGUID(unit)
+        if type(unit) ~= "string" then
+            return nil
+        end
+
+        local ok, guid = pcall(API.UnitGUID, unit)
+        if ok then
+            return guid
+        end
+
+        return nil
+    end
+
+    local function safeGuidEquals(a, b)
+        if type(a) ~= "string" or type(b) ~= "string" then
+            return false
+        end
+
+        local ok, equals = pcall(function()
+            return a == b
+        end)
+        return ok and equals == true
+    end
+
+    local function safeUnitTokenFromGuid(guid)
+        if type(guid) ~= "string" or not API.UnitTokenFromGUID then
+            return nil
+        end
+
+        local ok, token = pcall(API.UnitTokenFromGUID, guid)
+        if ok and type(token) == "string" and safeUnitExists(token) then
+            return token
+        end
+
+        return nil
     end
 
     function service.SetTooltipLine(tooltip, guid, message, r, g, b)
@@ -141,20 +189,22 @@ function NS.CreateTooltipView()
     end
 
     function service.ResolveBestUnitTokenForGuid(guid, fallbackUnit)
-        if fallbackUnit and API.UnitExists(fallbackUnit) and API.UnitGUID(fallbackUnit) == guid then
+        if type(guid) ~= "string" then
             return fallbackUnit
         end
 
-        if API.UnitTokenFromGUID then
-            local byGuid = API.UnitTokenFromGUID(guid)
-            if byGuid and API.UnitExists(byGuid) then
-                return byGuid
-            end
+        local byGuid = safeUnitTokenFromGuid(guid)
+        if byGuid then
+            return byGuid
+        end
+
+        if fallbackUnit and safeUnitExists(fallbackUnit) and safeGuidEquals(safeUnitGUID(fallbackUnit), guid) then
+            return fallbackUnit
         end
 
         for i = 1, #C.GUID_FALLBACK_UNITS do
             local unit = C.GUID_FALLBACK_UNITS[i]
-            if API.UnitExists(unit) and API.UnitGUID(unit) == guid then
+            if safeUnitExists(unit) and safeGuidEquals(safeUnitGUID(unit), guid) then
                 return unit
             end
         end
@@ -164,21 +214,29 @@ function NS.CreateTooltipView()
 
     function service.ResolveTooltipUnitAndGuid(tooltip, data)
         local _, unit = tooltip.GetUnit and tooltip:GetUnit() or nil
-        local guid = unit and API.UnitGUID(unit) or nil
+        if not safeUnitExists(unit) then
+            unit = nil
+        end
+
+        local guid = unit and safeUnitGUID(unit) or nil
 
         local worldFrame = API.WorldFrame
-        if (not unit or not API.UnitExists(unit)) and worldFrame and worldFrame.IsMouseMotionFocus and worldFrame:IsMouseMotionFocus() and API.UnitExists("mouseover") then
+        if (not unit or not safeUnitExists(unit)) and worldFrame and worldFrame.IsMouseMotionFocus and worldFrame:IsMouseMotionFocus() and safeUnitExists("mouseover") then
             unit = "mouseover"
-            guid = API.UnitGUID(unit)
+            guid = safeUnitGUID(unit)
         end
 
-        if (not guid) and data and data.guid then
-            guid = data.guid
+        if (not unit or not safeUnitExists(unit)) and not guid and data and type(data.guid) == "string" then
+            local unitFromDataGuid = safeUnitTokenFromGuid(data.guid)
+            if unitFromDataGuid then
+                unit = unitFromDataGuid
+                guid = safeUnitGUID(unit)
+            end
         end
 
-        if guid and (not unit or not API.UnitExists(unit)) then
+        if guid and (not unit or not safeUnitExists(unit)) then
             local bestUnit = service.ResolveBestUnitTokenForGuid(guid, unit)
-            if bestUnit and API.UnitExists(bestUnit) then
+            if bestUnit and safeUnitExists(bestUnit) then
                 unit = bestUnit
             end
         end

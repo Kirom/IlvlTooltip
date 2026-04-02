@@ -30,7 +30,7 @@ describe("IlvlTooltip tooltip view", function()
         assert.are.equal("iLvl: 620.0", tooltip:GetLineText(1))
     end)
 
-    it("resolves guid from tooltip data and maps to best unit token", function()
+    it("resolves guid from tooltip unit token", function()
         local guid = "Player-1-00000022"
         env:setUnit("target", {
             guid = guid,
@@ -39,9 +39,34 @@ describe("IlvlTooltip tooltip view", function()
             inRange = true,
         })
 
-        local tooltip = env:newTooltip("NoUnitTooltip")
-        local unit, resolvedGuid = tooltipView.ResolveTooltipUnitAndGuid(tooltip, { guid = guid })
+        local tooltip = env:newTooltip("UnitTokenTooltip")
+        tooltip:SetUnit("target")
+        local unit, resolvedGuid = tooltipView.ResolveTooltipUnitAndGuid(tooltip)
         assert.are.equal("target", unit)
+        assert.are.equal(guid, resolvedGuid)
+    end)
+
+    it("does not use tooltip data guid when no valid unit token is available", function()
+        local guid = "Player-1-00000026"
+        local tooltip = env:newTooltip("NoUnitTooltip")
+
+        local unit, resolvedGuid = tooltipView.ResolveTooltipUnitAndGuid(tooltip, { guid = guid })
+        assert.is_nil(unit)
+        assert.is_nil(resolvedGuid)
+    end)
+
+    it("maps tooltip data guid to a live unit token safely", function()
+        local guid = "Player-1-00000027"
+        env:setUnit("player", {
+            guid = guid,
+            isPlayer = true,
+            canInspect = true,
+            inRange = true,
+        })
+
+        local tooltip = env:newTooltip("DataGuidTooltip")
+        local unit, resolvedGuid = tooltipView.ResolveTooltipUnitAndGuid(tooltip, { guid = guid })
+        assert.are.equal("player", unit)
         assert.are.equal(guid, resolvedGuid)
     end)
 
@@ -57,6 +82,48 @@ describe("IlvlTooltip tooltip view", function()
 
         local tooltip = env:newTooltip("WorldTooltip")
         local unit, resolvedGuid = tooltipView.ResolveTooltipUnitAndGuid(tooltip)
+        assert.are.equal("mouseover", unit)
+        assert.are.equal(guid, resolvedGuid)
+    end)
+
+    it("ignores unsafe unit tokens returned by UnitTokenFromGUID", function()
+        local guid = "Player-1-00000024"
+        env:setUnit("target", {
+            guid = guid,
+            isPlayer = true,
+            canInspect = true,
+            inRange = true,
+        })
+
+        local originalUnitExists = _G.UnitExists
+        _G.UnitExists = function(unit)
+            if type(unit) ~= "string" then
+                error("bad argument 1 to UnitExists", 2)
+            end
+            return originalUnitExists(unit)
+        end
+        _G.UnitTokenFromGUID = function()
+            return {}
+        end
+
+        local resolved = tooltipView.ResolveBestUnitTokenForGuid(guid, nil)
+        assert.are.equal("target", resolved)
+    end)
+
+    it("handles non-string tooltip unit tokens without throwing", function()
+        local guid = "Player-1-00000025"
+        env.worldMouseFocus = true
+        env:setUnit("mouseover", {
+            guid = guid,
+            isPlayer = true,
+            canInspect = true,
+            inRange = true,
+        })
+
+        local tooltip = env:newTooltip("UnsafeTooltip")
+        tooltip:SetUnit({})
+
+        local unit, resolvedGuid = tooltipView.ResolveTooltipUnitAndGuid(tooltip, { guid = guid })
         assert.are.equal("mouseover", unit)
         assert.are.equal(guid, resolvedGuid)
     end)

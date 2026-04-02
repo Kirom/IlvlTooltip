@@ -5,6 +5,8 @@ local C = NS.Constants
 local API = NS.Api
 
 local math_min = math.min
+local pcall = pcall
+local string_sub = string.sub
 local string_format = string.format
 local type = type
 
@@ -38,7 +40,19 @@ function NS.CreateCache()
     end
 
     function service.IsPlayerGuid(guid)
-        return type(guid) == "string" and guid:sub(1, 7) == "Player-"
+        if type(guid) ~= "string" then
+            return false
+        end
+
+        local okPrefix, prefix = pcall(string_sub, guid, 1, 7)
+        if not okPrefix or type(prefix) ~= "string" then
+            return false
+        end
+
+        local okCompare, isPlayer = pcall(function()
+            return prefix == "Player-"
+        end)
+        return okCompare and isPlayer == true
     end
 
     function service.GetState(guid)
