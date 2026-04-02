@@ -32,6 +32,30 @@ describe("IlvlTooltip controller integration", function()
         assert.are.equal("iLvl: 638.0", env.gameTooltip:GetLineText(1))
     end)
 
+    it("shows Inspecting then rerenders value when tooltip-triggered inspect completes", function()
+        local guid = "Player-1-00000037"
+        env:setUnit("target", {
+            guid = guid,
+            isPlayer = true,
+            canInspect = true,
+            inRange = true,
+        })
+        env.gameTooltip:SetUnit("target")
+        env:setInspectItemLevelFn(function()
+            return nil, nil
+        end)
+
+        env:fireUnitTooltip(env.gameTooltip, { guid = guid })
+        assert.are.equal("iLvl: Inspecting...", env.gameTooltip:GetLineText(1))
+        assert.are.equal(1, #env.inspectRequests)
+
+        env:setInspectItemLevelFn(function()
+            return nil, 647
+        end)
+        env:fireEvent("INSPECT_READY", guid)
+        assert.are.equal("iLvl: 647.0", env.gameTooltip:GetLineText(1))
+    end)
+
     it("renders own ilvl when tooltip resolves player via data guid token mapping", function()
         local playerGuid = "Player-1-00000030"
         env.playerIlvl = 633.7

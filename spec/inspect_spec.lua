@@ -7,22 +7,10 @@ describe("IlvlTooltip inspect orchestrator", function()
     local cache
     local inspect
     local visibleUpdates
+    local resolveBestUnitTokenForGuid
 
     local function isInspectableUnit(unit)
         return _G.UnitExists(unit) and _G.UnitIsPlayer(unit) and _G.CanInspect(unit) and _G.CheckInteractDistance(unit, 1)
-    end
-
-    local function resolveBestUnitTokenForGuid(guid, fallbackUnit)
-        if fallbackUnit and _G.UnitExists(fallbackUnit) and _G.UnitGUID(fallbackUnit) == guid then
-            return fallbackUnit
-        end
-
-        local byGuid = _G.UnitTokenFromGUID(guid)
-        if byGuid and _G.UnitExists(byGuid) then
-            return byGuid
-        end
-
-        return fallbackUnit
     end
 
     before_each(function()
@@ -37,6 +25,19 @@ describe("IlvlTooltip inspect orchestrator", function()
 
         cache = NS.CreateCache()
         visibleUpdates = {}
+        resolveBestUnitTokenForGuid = function(guid, fallbackUnit)
+            local safe = NS.Safe
+            if fallbackUnit and safe.UnitExists(fallbackUnit) and safe.GuidEquals(safe.UnitGUID(fallbackUnit), guid) then
+                return fallbackUnit
+            end
+
+            local byGuid = safe.UnitTokenFromGUID(guid)
+            if byGuid then
+                return byGuid
+            end
+
+            return fallbackUnit
+        end
 
         inspect = NS.CreateInspectOrchestrator({
             cache = cache,
@@ -205,6 +206,44 @@ describe("IlvlTooltip inspect orchestrator", function()
         assert.is_true(inspect.Request("target", guid))
         local hit = inspect.TryReadLoadedItemLevel("target", guid)
         assert.is_false(hit)
+        assert.are.equal(1, #env.inspectRequests)
+    end)
+
+    it("cancels queued inspect when fast path resolves that guid", function()
+        local guidA = "Player-1-00000027"
+        local guidB = "Player-1-00000028"
+
+        env:setUnit("target", {
+            guid = guidA,
+            isPlayer = true,
+            canInspect = true,
+            inRange = true,
+        })
+        env:setUnit("focus", {
+            guid = guidB,
+            isPlayer = true,
+            canInspect = true,
+            inRange = true,
+        })
+        env:setInspectItemLevelFn(function(unit)
+            if unit == "focus" then
+                return nil, 651
+            end
+            if unit == "target" then
+                return nil, 640
+            end
+            return nil, nil
+        end)
+
+        assert.is_true(inspect.Request("target", guidA))
+        assert.is_true(inspect.Request("focus", guidB))
+        assert.are.equal(1, #env.inspectRequests)
+
+        local fastHit = inspect.TryReadLoadedItemLevel("focus", guidB)
+        assert.is_true(fastHit)
+
+        inspect.OnInspectReady(guidA)
+        env:advance(NS.Constants.INSPECT_COOLDOWN + 0.1)
         assert.are.equal(1, #env.inspectRequests)
     end)
 

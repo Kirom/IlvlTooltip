@@ -79,6 +79,20 @@ function NS.CreateInspectOrchestrator(deps)
         inspectQueue[queueHead] = request
     end
 
+    local function cancelQueuedRequest(guid)
+        if not Safe.IsGuid(guid) then
+            return
+        end
+
+        local existing = queuedEntriesByGuid[guid]
+        if not existing then
+            return
+        end
+
+        existing.cancelled = true
+        queuedEntriesByGuid[guid] = nil
+    end
+
     local function tryBuiltInInspectItemLevel(unit)
         local paperDoll = API.C_PaperDollInfo
         if not (paperDoll and paperDoll.GetInspectItemLevel) then
@@ -181,6 +195,7 @@ function NS.CreateInspectOrchestrator(deps)
             return false
         end
 
+        cancelQueuedRequest(guid)
         return true, ilvl
     end
 
@@ -276,12 +291,15 @@ function NS.CreateInspectOrchestrator(deps)
                     queuedEntriesByGuid[request.guid] = nil
                 end
 
-                local backoffActive = cache.IsInFailureBackoff(request.guid)
-                local bestUnit = resolveBestUnitTokenForGuid(request.guid, request.unit)
-                if not backoffActive and isInspectableUnit(bestUnit) then
-                    resetQueueIndicesIfEmpty()
-                    startInspect(bestUnit, request.guid)
-                    return
+                local _, cacheState = cache.GetState(request.guid)
+                if cacheState ~= "fresh" then
+                    local backoffActive = cache.IsInFailureBackoff(request.guid)
+                    local bestUnit = resolveBestUnitTokenForGuid(request.guid, request.unit)
+                    if not backoffActive and isInspectableUnit(bestUnit) then
+                        resetQueueIndicesIfEmpty()
+                        startInspect(bestUnit, request.guid)
+                        return
+                    end
                 end
             end
 

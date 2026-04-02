@@ -149,7 +149,7 @@ function NS.CreateCache()
                     inBackoff = (now - (entry.lastAttemptAt or 0)) < backoff
                 end
 
-                local hasIlvl = entry.ilvl and entry.ilvl > 0
+                local hasIlvl = isValidIlvl(entry.ilvl)
                 if hardExpired and not inBackoff then
                     cache[guid] = nil
                 elseif not hasIlvl and not inBackoff and entry.lastStatus ~= "pending" then
