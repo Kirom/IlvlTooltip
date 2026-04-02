@@ -30,6 +30,7 @@ describe("IlvlTooltip inspect orchestrator", function()
         env:installGlobals()
         NS = Loader.LoadModules({
             "IlvlTooltip_Constants.lua",
+            "IlvlTooltip_Safe.lua",
             "IlvlTooltip_Cache.lua",
             "IlvlTooltip_Inspect.lua",
         })
@@ -61,6 +62,19 @@ describe("IlvlTooltip inspect orchestrator", function()
         assert.are.equal(1, #env.inspectRequests)
     end)
 
+    it("rejects non-string guid requests", function()
+        env:setUnit("target", {
+            guid = "Player-1-00000010",
+            isPlayer = true,
+            canInspect = true,
+            inRange = true,
+        })
+
+        assert.is_false(inspect.Request("target", {}))
+        assert.is_false(inspect.IsPendingOrQueued({}))
+        assert.are.equal(0, #env.inspectRequests)
+    end)
+
     it("writes successful inspect results to cache", function()
         local guid = "Player-1-00000012"
         env:setUnit("target", {
@@ -82,6 +96,29 @@ describe("IlvlTooltip inspect orchestrator", function()
         assert.are.equal("fresh", state)
         assert.is_false(inspect.IsWaiting())
         assert.are.equal(1, env.clearInspectCalls)
+    end)
+
+    it("does not use zero-arg inspect ilvl fallback", function()
+        local guid = "Player-1-00000025"
+        env:setUnit("target", {
+            guid = guid,
+            isPlayer = true,
+            canInspect = true,
+            inRange = true,
+        })
+        env:setInspectItemLevelFn(function(unit)
+            if unit == nil then
+                return nil, 700
+            end
+            return nil, nil
+        end)
+
+        assert.is_true(inspect.Request("target", guid))
+        inspect.OnInspectReady(guid)
+
+        local _, _, _, _, hasValue = cache.GetDisplay(guid)
+        assert.is_false(hasValue)
+        assert.are.equal("Unavailable", visibleUpdates[#visibleUpdates][2])
     end)
 
     it("resolves loaded inspect data without NotifyInspect via fast path", function()

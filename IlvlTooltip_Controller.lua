@@ -2,45 +2,19 @@ local NS = IlvlTooltip or {}
 IlvlTooltip = NS
 
 local API = NS.Api
-
-local pcall = pcall
-local type = type
+local Safe = NS.Safe
 
 local Controller = NS.Controller or {}
 NS.Controller = Controller
 
 local started = false
 
-local function safeUnitGUID(unit)
-    if type(unit) ~= "string" then
-        return nil
-    end
-
-    local ok, guid = pcall(API.UnitGUID, unit)
-    if ok then
-        return guid
-    end
-
-    return nil
-end
-
-local function safeGuidEquals(a, b)
-    if type(a) ~= "string" or type(b) ~= "string" then
-        return false
-    end
-
-    local ok, equals = pcall(function()
-        return a == b
-    end)
-    return ok and equals == true
-end
-
 local function isInInspectRange(unit)
-    return unit and API.UnitExists(unit) and (not API.CheckInteractDistance or API.CheckInteractDistance(unit, 1))
+    return Safe.UnitExists(unit) and (not API.CheckInteractDistance or Safe.CheckInteractDistance(unit, 1))
 end
 
 local function isInspectableUnit(unit)
-    return unit and API.UnitExists(unit) and API.UnitIsPlayer(unit) and API.CanInspect(unit) and isInInspectRange(unit)
+    return Safe.UnitExists(unit) and Safe.UnitIsPlayer(unit) and Safe.CanInspect(unit) and isInInspectRange(unit)
 end
 
 function Controller.Start()
@@ -63,7 +37,7 @@ function Controller.Start()
         if not currentGuid then
             currentGuid = tooltipView.GetRenderedGuid(gameTooltip)
         end
-        if not currentGuid or not safeGuidEquals(currentGuid, guid) then
+        if not currentGuid or not Safe.GuidEquals(currentGuid, guid) then
             return
         end
 
@@ -73,7 +47,7 @@ function Controller.Start()
             return
         end
 
-        if inspect and inspect.IsWaiting() and safeGuidEquals(inspect.GetPendingGuid(), guid) and currentUnit and API.UnitExists(currentUnit) then
+        if inspect and inspect.IsWaiting() and Safe.GuidEquals(inspect.GetPendingGuid(), guid) and Safe.UnitExists(currentUnit) then
             tooltipView.SetTooltipLine(gameTooltip, guid, "Inspecting...", 1, 0.82, 0)
             return
         end
@@ -95,16 +69,16 @@ function Controller.Start()
     end
 
     local function prefetchUnit(unit)
-        if not unit or not API.UnitExists(unit) or not API.UnitIsPlayer(unit) then
+        if not Safe.UnitExists(unit) or not Safe.UnitIsPlayer(unit) then
             return
         end
 
-        local guid = API.UnitGUID(unit)
+        local guid = Safe.UnitGUID(unit)
         if not guid or not cache.IsPlayerGuid(guid) then
             return
         end
 
-        if API.UnitIsUnit and API.UnitIsUnit(unit, "player") then
+        if Safe.UnitIsUnit(unit, "player") then
             return
         end
 
@@ -136,11 +110,11 @@ function Controller.Start()
             return
         end
 
-        if unit and API.UnitExists(unit) and not API.UnitIsPlayer(unit) and not cache.IsPlayerGuid(guid) then
+        if Safe.UnitExists(unit) and not Safe.UnitIsPlayer(unit) and not cache.IsPlayerGuid(guid) then
             return
         end
 
-        if (unit and API.UnitExists(unit) and API.UnitIsUnit(unit, "player")) or safeGuidEquals(guid, safeUnitGUID("player")) then
+        if Safe.UnitIsUnit(unit, "player") or Safe.GuidEquals(guid, Safe.UnitGUID("player")) then
             local _, equipped = API.GetAverageItemLevel()
             if equipped and equipped > 0 then
                 tooltipView.SetTooltipLine(tooltip, guid, string.format("%.1f", equipped), 0.2, 1, 0.2)
@@ -176,7 +150,7 @@ function Controller.Start()
             return
         end
 
-        if unit and API.UnitExists(unit) and not inspectable then
+        if Safe.UnitExists(unit) and not inspectable then
             tooltipView.SetTooltipLine(tooltip, guid, "Out of range", 1, 0.3, 0.3)
             return
         end

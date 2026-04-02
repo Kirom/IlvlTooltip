@@ -3,12 +3,10 @@ IlvlTooltip = NS
 
 local C = NS.Constants
 local API = NS.Api
+local Safe = NS.Safe
 
 local math_min = math.min
-local pcall = pcall
-local string_sub = string.sub
 local string_format = string.format
-local type = type
 
 function NS.CreateCache()
     local cache = {}
@@ -17,7 +15,7 @@ function NS.CreateCache()
     local service = {}
 
     local function ensureCacheEntry(guid)
-        if not guid then
+        if not Safe.IsGuid(guid) then
             return nil
         end
 
@@ -40,22 +38,14 @@ function NS.CreateCache()
     end
 
     function service.IsPlayerGuid(guid)
-        if type(guid) ~= "string" then
-            return false
-        end
-
-        local okPrefix, prefix = pcall(string_sub, guid, 1, 7)
-        if not okPrefix or type(prefix) ~= "string" then
-            return false
-        end
-
-        local okCompare, isPlayer = pcall(function()
-            return prefix == "Player-"
-        end)
-        return okCompare and isPlayer == true
+        return Safe.IsPlayerGuid(guid)
     end
 
     function service.GetState(guid)
+        if not Safe.IsGuid(guid) then
+            return nil, "none"
+        end
+
         local entry = guid and cache[guid]
         if not entry then
             return nil, "none"
@@ -88,6 +78,10 @@ function NS.CreateCache()
     end
 
     function service.IsInFailureBackoff(guid)
+        if not Safe.IsGuid(guid) then
+            return false, 0
+        end
+
         local entry = guid and cache[guid]
         if not entry then
             return false, 0

@@ -11,6 +11,7 @@ describe("IlvlTooltip tooltip view", function()
         env:installGlobals()
         NS = Loader.LoadModules({
             "IlvlTooltip_Constants.lua",
+            "IlvlTooltip_Safe.lua",
             "IlvlTooltip_TooltipView.lua",
         })
         tooltipView = NS.CreateTooltipView()
@@ -68,6 +69,22 @@ describe("IlvlTooltip tooltip view", function()
         local unit, resolvedGuid = tooltipView.ResolveTooltipUnitAndGuid(tooltip, { guid = guid })
         assert.are.equal("player", unit)
         assert.are.equal(guid, resolvedGuid)
+    end)
+
+    it("rejects UnitTokenFromGUID mapping when token guid mismatches", function()
+        local guid = "Player-1-00000028"
+        env:setUnit("target", {
+            guid = "Player-1-99999999",
+            isPlayer = true,
+            canInspect = true,
+            inRange = true,
+        })
+        _G.UnitTokenFromGUID = function()
+            return "target"
+        end
+
+        local resolved = tooltipView.ResolveBestUnitTokenForGuid(guid, nil)
+        assert.is_nil(resolved)
     end)
 
     it("uses mouseover fallback when world frame owns focus", function()

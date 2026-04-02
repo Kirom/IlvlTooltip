@@ -11,6 +11,7 @@ describe("IlvlTooltip cache service", function()
         env:installGlobals()
         NS = Loader.LoadModules({
             "IlvlTooltip_Constants.lua",
+            "IlvlTooltip_Safe.lua",
             "IlvlTooltip_Cache.lua",
         })
         cache = NS.CreateCache()
@@ -85,5 +86,15 @@ describe("IlvlTooltip cache service", function()
         local entry, state = cache.GetState(guid)
         assert.is_not_nil(entry)
         assert.are.equal("expired", state)
+    end)
+
+    it("ignores non-string guid inputs on writes", function()
+        cache.MarkSuccess({}, 601)
+        cache.MarkAttempt({})
+        cache.MarkFailure({}, "timeout")
+
+        local entry, state = cache.GetState({})
+        assert.is_nil(entry)
+        assert.are.equal("none", state)
     end)
 end)

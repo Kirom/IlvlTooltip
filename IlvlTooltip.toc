@@ -5,6 +5,7 @@
 ## Version: 2.0.0
 
 IlvlTooltip_Constants.lua
+IlvlTooltip_Safe.lua
 IlvlTooltip_Cache.lua
 IlvlTooltip_TooltipView.lua
 IlvlTooltip_Inspect.lua

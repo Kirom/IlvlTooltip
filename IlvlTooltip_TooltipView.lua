@@ -3,11 +3,10 @@ IlvlTooltip = NS
 
 local C = NS.Constants
 local API = NS.Api
+local Safe = NS.Safe
 
-local pcall = pcall
 local setmetatable = setmetatable
 local string_sub = string.sub
-local type = type
 
 function NS.CreateTooltipView()
     local tooltipLineCache = setmetatable({}, { __mode = "k" })
@@ -17,52 +16,6 @@ function NS.CreateTooltipView()
 
     local function startsWith(text, prefix)
         return text and prefix and string_sub(text, 1, #prefix) == prefix
-    end
-
-    local function safeUnitExists(unit)
-        if type(unit) ~= "string" then
-            return false
-        end
-
-        local ok, exists = pcall(API.UnitExists, unit)
-        return ok and exists == true
-    end
-
-    local function safeUnitGUID(unit)
-        if type(unit) ~= "string" then
-            return nil
-        end
-
-        local ok, guid = pcall(API.UnitGUID, unit)
-        if ok then
-            return guid
-        end
-
-        return nil
-    end
-
-    local function safeGuidEquals(a, b)
-        if type(a) ~= "string" or type(b) ~= "string" then
-            return false
-        end
-
-        local ok, equals = pcall(function()
-            return a == b
-        end)
-        return ok and equals == true
-    end
-
-    local function safeUnitTokenFromGuid(guid)
-        if type(guid) ~= "string" or not API.UnitTokenFromGUID then
-            return nil
-        end
-
-        local ok, token = pcall(API.UnitTokenFromGUID, guid)
-        if ok and type(token) == "string" and safeUnitExists(token) then
-            return token
-        end
-
-        return nil
     end
 
     function service.SetTooltipLine(tooltip, guid, message, r, g, b)
@@ -77,7 +30,7 @@ function NS.CreateTooltipView()
         local cachedLine = tooltipLineCache[tooltip]
         local renderState = tooltipRenderState[tooltip]
 
-        if renderState and renderState.guid == guid and renderState.text == lineText and renderState.r == red and renderState.g == green and renderState.b == blue then
+        if renderState and Safe.GuidEquals(renderState.guid, guid) and renderState.text == lineText and renderState.r == red and renderState.g == green and renderState.b == blue then
             if cachedLine and cachedLine.GetText and cachedLine:GetText() == lineText then
                 return
             end
@@ -189,22 +142,22 @@ function NS.CreateTooltipView()
     end
 
     function service.ResolveBestUnitTokenForGuid(guid, fallbackUnit)
-        if type(guid) ~= "string" then
+        if not Safe.IsGuid(guid) then
             return fallbackUnit
         end
 
-        local byGuid = safeUnitTokenFromGuid(guid)
+        local byGuid = Safe.UnitTokenFromGUID(guid)
         if byGuid then
             return byGuid
         end
 
-        if fallbackUnit and safeUnitExists(fallbackUnit) and safeGuidEquals(safeUnitGUID(fallbackUnit), guid) then
+        if fallbackUnit and Safe.UnitExists(fallbackUnit) and Safe.GuidEquals(Safe.UnitGUID(fallbackUnit), guid) then
             return fallbackUnit
         end
 
         for i = 1, #C.GUID_FALLBACK_UNITS do
             local unit = C.GUID_FALLBACK_UNITS[i]
-            if safeUnitExists(unit) and safeGuidEquals(safeUnitGUID(unit), guid) then
+            if Safe.UnitExists(unit) and Safe.GuidEquals(Safe.UnitGUID(unit), guid) then
                 return unit
             end
         end
@@ -214,29 +167,29 @@ function NS.CreateTooltipView()
 
     function service.ResolveTooltipUnitAndGuid(tooltip, data)
         local _, unit = tooltip.GetUnit and tooltip:GetUnit() or nil
-        if not safeUnitExists(unit) then
+        if not Safe.UnitExists(unit) then
             unit = nil
         end
 
-        local guid = unit and safeUnitGUID(unit) or nil
+        local guid = unit and Safe.UnitGUID(unit) or nil
 
         local worldFrame = API.WorldFrame
-        if (not unit or not safeUnitExists(unit)) and worldFrame and worldFrame.IsMouseMotionFocus and worldFrame:IsMouseMotionFocus() and safeUnitExists("mouseover") then
+        if (not unit or not Safe.UnitExists(unit)) and worldFrame and worldFrame.IsMouseMotionFocus and worldFrame:IsMouseMotionFocus() and Safe.UnitExists("mouseover") then
             unit = "mouseover"
-            guid = safeUnitGUID(unit)
+            guid = Safe.UnitGUID(unit)
         end
 
-        if (not unit or not safeUnitExists(unit)) and not guid and data and type(data.guid) == "string" then
-            local unitFromDataGuid = safeUnitTokenFromGuid(data.guid)
+        if (not unit or not Safe.UnitExists(unit)) and not guid and data and Safe.IsGuid(data.guid) then
+            local unitFromDataGuid = Safe.UnitTokenFromGUID(data.guid)
             if unitFromDataGuid then
                 unit = unitFromDataGuid
-                guid = safeUnitGUID(unit)
+                guid = Safe.UnitGUID(unit)
             end
         end
 
-        if guid and (not unit or not safeUnitExists(unit)) then
+        if guid and (not unit or not Safe.UnitExists(unit)) then
             local bestUnit = service.ResolveBestUnitTokenForGuid(guid, unit)
-            if bestUnit and safeUnitExists(bestUnit) then
+            if bestUnit and Safe.UnitExists(bestUnit) then
                 unit = bestUnit
             end
         end

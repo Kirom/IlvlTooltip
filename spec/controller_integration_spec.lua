@@ -31,6 +31,29 @@ describe("IlvlTooltip controller integration", function()
         assert.are.equal("iLvl: 638.0", env.gameTooltip:GetLineText(1))
     end)
 
+    it("renders own ilvl when tooltip resolves player via data guid token mapping", function()
+        local playerGuid = "Player-1-00000030"
+        env.playerIlvl = 633.7
+        env:setUnit("player", {
+            guid = playerGuid,
+            isPlayer = true,
+            canInspect = true,
+            inRange = true,
+        })
+        env.gameTooltip:SetUnit(nil)
+
+        env:fireUnitTooltip(env.gameTooltip, { guid = playerGuid })
+        assert.are.equal("iLvl: 633.7", env.gameTooltip:GetLineText(1))
+    end)
+
+    it("ignores non-string tooltip data guid payloads", function()
+        env.gameTooltip:SetUnit(nil)
+        env:fireUnitTooltip(env.gameTooltip, { guid = {} })
+
+        assert.is_nil(env.gameTooltip:GetLineText(1))
+        assert.are.equal(0, #env.inspectRequests)
+    end)
+
     it("keeps stale cache visible and requests refresh in warm state", function()
         local guid = "Player-1-00000032"
         env:setUnit("target", {

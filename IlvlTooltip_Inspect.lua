@@ -3,6 +3,7 @@ IlvlTooltip = NS
 
 local C = NS.Constants
 local API = NS.Api
+local Safe = NS.Safe
 
 local type = type
 
@@ -94,21 +95,11 @@ function NS.CreateInspectOrchestrator(deps)
             end
         end
 
-        ok, a, b = pcall(paperDoll.GetInspectItemLevel)
-        if ok then
-            if type(b) == "number" and b > 0 then
-                return b
-            end
-            if type(a) == "number" and a > 0 then
-                return a
-            end
-        end
-
         return nil
     end
 
     local function tryManualInspectItemLevel(unit)
-        if not unit or not API.UnitExists(unit) then
+        if not Safe.UnitExists(unit) then
             return nil, true
         end
 
@@ -138,6 +129,10 @@ function NS.CreateInspectOrchestrator(deps)
     end
 
     local function tryReadLoadedItemLevel(unit, guid)
+        if not Safe.IsGuid(guid) then
+            return nil, false, unit
+        end
+
         local bestUnit = resolveBestUnitTokenForGuid(guid, unit)
         local ilvl = tryBuiltInInspectItemLevel(bestUnit)
         local missingData = false
@@ -150,10 +145,10 @@ function NS.CreateInspectOrchestrator(deps)
     end
 
     function service.IsPendingOrQueued(guid)
-        if not guid then
+        if not Safe.IsGuid(guid) then
             return false
         end
-        return (waitingForInspect and pendingGuid == guid) or queuedEntriesByGuid[guid] ~= nil
+        return (waitingForInspect and Safe.GuidEquals(pendingGuid, guid)) or queuedEntriesByGuid[guid] ~= nil
     end
 
     function service.IsGuidProtected(guid)
@@ -169,11 +164,11 @@ function NS.CreateInspectOrchestrator(deps)
     end
 
     function service.TryReadLoadedItemLevel(unit, guid)
-        if not guid then
+        if not Safe.IsGuid(guid) then
             return false
         end
 
-        if waitingForInspect and pendingGuid == guid then
+        if waitingForInspect and Safe.GuidEquals(pendingGuid, guid) then
             return false
         end
 
@@ -199,7 +194,7 @@ function NS.CreateInspectOrchestrator(deps)
         end
 
         scheduleAfter(C.EARLY_PROBE_DELAY, function()
-            if not waitingForInspect or pendingGuid ~= guid or inspectAttemptSerial ~= attemptSerial then
+            if not waitingForInspect or not Safe.GuidEquals(pendingGuid, guid) or inspectAttemptSerial ~= attemptSerial then
                 return
             end
 
@@ -229,7 +224,7 @@ function NS.CreateInspectOrchestrator(deps)
         scheduleEarlyProbe(guid, currentAttemptSerial, 1)
 
         pendingTimeoutTimer = scheduleTimer(C.INSPECT_TIMEOUT, function()
-            if waitingForInspect and pendingGuid == guid then
+            if waitingForInspect and Safe.GuidEquals(pendingGuid, guid) then
                 cache.MarkFailure(guid, "timeout")
                 finishInspect()
                 onVisibleUpdate(guid, "Unavailable", 1, 0.3, 0.3)
@@ -285,7 +280,7 @@ function NS.CreateInspectOrchestrator(deps)
     end
 
     local function enqueueInspect(unit, guid, priority)
-        if not guid or (waitingForInspect and pendingGuid == guid) then
+        if not Safe.IsGuid(guid) or (waitingForInspect and Safe.GuidEquals(pendingGuid, guid)) then
             return false
         end
 
@@ -316,7 +311,7 @@ function NS.CreateInspectOrchestrator(deps)
     end
 
     function service.Request(unit, guid, options)
-        if not guid or service.IsPendingOrQueued(guid) then
+        if not Safe.IsGuid(guid) or service.IsPendingOrQueued(guid) then
             local requestedPriority = false
             if type(options) == "table" then
                 requestedPriority = options.priority == true
@@ -347,7 +342,7 @@ function NS.CreateInspectOrchestrator(deps)
     end
 
     resolveInspectWithRetry = function(guid, unit, attempt)
-        if guid ~= pendingGuid then
+        if not Safe.GuidEquals(guid, pendingGuid) then
             return
         end
 
@@ -372,7 +367,7 @@ function NS.CreateInspectOrchestrator(deps)
     end
 
     function service.OnInspectReady(guid)
-        if waitingForInspect and guid == pendingGuid then
+        if waitingForInspect and Safe.GuidEquals(guid, pendingGuid) then
             resolveInspectWithRetry(guid, pendingUnit, 0)
         end
     end
