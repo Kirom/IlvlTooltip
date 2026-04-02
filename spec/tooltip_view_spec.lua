@@ -47,13 +47,13 @@ describe("IlvlTooltip tooltip view", function()
         assert.are.equal(guid, resolvedGuid)
     end)
 
-    it("does not use tooltip data guid when no valid unit token is available", function()
+    it("keeps tooltip data guid when no valid unit token is available", function()
         local guid = "Player-1-00000026"
         local tooltip = env:newTooltip("NoUnitTooltip")
 
         local unit, resolvedGuid = tooltipView.ResolveTooltipUnitAndGuid(tooltip, { guid = guid })
         assert.is_nil(unit)
-        assert.is_nil(resolvedGuid)
+        assert.are.equal(guid, resolvedGuid)
     end)
 
     it("maps tooltip data guid to a live unit token safely", function()
@@ -143,5 +143,23 @@ describe("IlvlTooltip tooltip view", function()
         local unit, resolvedGuid = tooltipView.ResolveTooltipUnitAndGuid(tooltip, { guid = guid })
         assert.are.equal("mouseover", unit)
         assert.are.equal(guid, resolvedGuid)
+    end)
+
+    it("re-adds addon line when cached line handle is stale", function()
+        local guid = "Player-1-00000029"
+        local tooltip = env:newTooltip("StaleLineTooltip")
+        tooltip:Show()
+
+        tooltipView.SetTooltipLine(tooltip, guid, "Inspecting...", 1, 0.82, 0)
+        assert.are.equal(1, tooltip:NumLines())
+        assert.are.equal("iLvl: Inspecting...", tooltip:GetLineText(1))
+
+        tooltip:ClearLines()
+        tooltip:AddLine("Player Name", 1, 1, 1)
+
+        tooltipView.SetTooltipLine(tooltip, guid, "Inspecting...", 1, 0.82, 0)
+        assert.are.equal(2, tooltip:NumLines())
+        assert.are.equal("Player Name", tooltip:GetLineText(1))
+        assert.are.equal("iLvl: Inspecting...", tooltip:GetLineText(2))
     end)
 end)

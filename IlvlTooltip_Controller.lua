@@ -132,6 +132,17 @@ function Controller.Start()
         end
 
         local inspectable = isInspectableUnit(unit)
+        if inspectable and shouldRefreshCacheState(cacheState) then
+            local fastHit = inspect.TryReadLoadedItemLevel(unit, guid)
+            if fastHit then
+                local freshText, fr, fg, fb, hasFreshValue = cache.GetDisplay(guid)
+                if hasFreshValue then
+                    tooltipView.SetTooltipLine(tooltip, guid, freshText, fr, fg, fb)
+                    return
+                end
+            end
+        end
+
         local backoffActive = cache.IsInFailureBackoff(guid)
         local pendingOrQueued = inspect.IsPendingOrQueued(guid)
 

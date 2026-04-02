@@ -18,6 +18,50 @@ function NS.CreateTooltipView()
         return text and prefix and string_sub(text, 1, #prefix) == prefix
     end
 
+    local function getTooltipLineAt(tooltipName, index)
+        return _G[tooltipName .. "TextLeft" .. index]
+    end
+
+    local function findAddonLine(tooltip)
+        local tooltipName = tooltip and tooltip:GetName()
+        local numLines = tooltip and tooltip:NumLines()
+        if not tooltipName or not numLines or numLines <= 0 then
+            return nil
+        end
+
+        for i = 1, numLines do
+            local line = getTooltipLineAt(tooltipName, i)
+            if line then
+                local text = line:GetText()
+                if startsWith(text, C.ADDON_PREFIX) then
+                    return line
+                end
+            end
+        end
+
+        return nil
+    end
+
+    local function isLineOnTooltip(tooltip, expectedLine)
+        if not tooltip or not expectedLine then
+            return false
+        end
+
+        local tooltipName = tooltip:GetName()
+        local numLines = tooltip:NumLines()
+        if not tooltipName or not numLines or numLines <= 0 then
+            return false
+        end
+
+        for i = 1, numLines do
+            if getTooltipLineAt(tooltipName, i) == expectedLine then
+                return true
+            end
+        end
+
+        return false
+    end
+
     function service.SetTooltipLine(tooltip, guid, message, r, g, b)
         if not tooltip then
             return
@@ -28,6 +72,10 @@ function NS.CreateTooltipView()
         local blue = b or 0
         local lineText = C.ADDON_PREFIX .. " " .. message
         local cachedLine = tooltipLineCache[tooltip]
+        if cachedLine and not isLineOnTooltip(tooltip, cachedLine) then
+            cachedLine = nil
+            tooltipLineCache[tooltip] = nil
+        end
         local renderState = tooltipRenderState[tooltip]
 
         if renderState and Safe.GuidEquals(renderState.guid, guid) and renderState.text == lineText and renderState.r == red and renderState.g == green and renderState.b == blue then
@@ -57,37 +105,28 @@ function NS.CreateTooltipView()
             tooltipLineCache[tooltip] = nil
         end
 
-        local tooltipName = tooltip:GetName()
-        local numLines = tooltip:NumLines()
+        local existingLine = findAddonLine(tooltip)
+        if existingLine then
+            existingLine:SetText(lineText)
+            existingLine:SetTextColor(red, green, blue)
+            tooltipLineCache[tooltip] = existingLine
 
-        if tooltipName and numLines and numLines > 0 then
-            for i = 1, numLines do
-                local line = _G[tooltipName .. "TextLeft" .. i]
-                if line then
-                    local text = line:GetText()
-                    if startsWith(text, C.ADDON_PREFIX) then
-                        line:SetText(lineText)
-                        line:SetTextColor(red, green, blue)
-                        tooltipLineCache[tooltip] = line
-
-                        if not renderState then
-                            renderState = {}
-                            tooltipRenderState[tooltip] = renderState
-                        end
-                        renderState.guid = guid
-                        renderState.text = lineText
-                        renderState.r = red
-                        renderState.g = green
-                        renderState.b = blue
-                        return
-                    end
-                end
+            if not renderState then
+                renderState = {}
+                tooltipRenderState[tooltip] = renderState
             end
+            renderState.guid = guid
+            renderState.text = lineText
+            renderState.r = red
+            renderState.g = green
+            renderState.b = blue
+            return
         end
 
         tooltip:AddLine(lineText, red, green, blue)
+        local tooltipName = tooltip:GetName()
         if tooltipName then
-            local lastLine = _G[tooltipName .. "TextLeft" .. tooltip:NumLines()]
+            local lastLine = getTooltipLineAt(tooltipName, tooltip:NumLines())
             if lastLine then
                 tooltipLineCache[tooltip] = lastLine
             end
@@ -119,23 +158,14 @@ function NS.CreateTooltipView()
         end
 
         local cachedLine = tooltipLineCache[tooltip]
-        if cachedLine and cachedLine.GetText and startsWith(cachedLine:GetText(), C.ADDON_PREFIX) then
+        if cachedLine and cachedLine.GetText and isLineOnTooltip(tooltip, cachedLine) and startsWith(cachedLine:GetText(), C.ADDON_PREFIX) then
             return renderState.guid
         end
 
-        local tooltipName = tooltip:GetName()
-        local numLines = tooltip:NumLines()
-        if tooltipName and numLines and numLines > 0 then
-            for i = 1, numLines do
-                local line = _G[tooltipName .. "TextLeft" .. i]
-                if line then
-                    local text = line:GetText()
-                    if startsWith(text, C.ADDON_PREFIX) then
-                        tooltipLineCache[tooltip] = line
-                        return renderState.guid
-                    end
-                end
-            end
+        local line = findAddonLine(tooltip)
+        if line then
+            tooltipLineCache[tooltip] = line
+            return renderState.guid
         end
 
         return nil
@@ -184,6 +214,7 @@ function NS.CreateTooltipView()
         end
 
         if (not unit or not Safe.UnitExists(unit)) and not guid and data and Safe.IsGuid(data.guid) then
+            guid = data.guid
             local unitFromDataGuid = Safe.UnitTokenFromGUID(data.guid)
             if unitFromDataGuid then
                 unit = unitFromDataGuid

@@ -146,4 +146,30 @@ describe("IlvlTooltip controller integration", function()
         env:fireEvent("INSPECT_READY", guid)
         assert.are.equal("iLvl: 639.0", env.gameTooltip:GetLineText(1))
     end)
+
+    it("hooks OnTooltipSetUnit when TooltipDataProcessor is unavailable", function()
+        env = WowMock.new()
+        env:installGlobals()
+        _G.TooltipDataProcessor = nil
+        _G.Enum = nil
+        NS = Loader.LoadAll()
+
+        local guid = "Player-1-00000036"
+        env:setUnit("target", {
+            guid = guid,
+            isPlayer = true,
+            canInspect = true,
+            inRange = true,
+        })
+        env.gameTooltip:SetUnit("target")
+        env:setInspectItemLevelFn(function()
+            return nil, 641
+        end)
+
+        env.gameTooltip:FireScript("OnTooltipSetUnit")
+        assert.are.equal("iLvl: Inspecting...", env.gameTooltip:GetLineText(1))
+
+        env:fireEvent("INSPECT_READY", guid)
+        assert.are.equal("iLvl: 641.0", env.gameTooltip:GetLineText(1))
+    end)
 end)
