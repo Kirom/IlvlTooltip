@@ -31,6 +31,17 @@ describe("IlvlTooltip tooltip view", function()
         assert.are.equal("iLvl: 620.0", tooltip:GetLineText(1))
     end)
 
+    it("normalizes nil and non-string tooltip messages", function()
+        local tooltip = env:newTooltip("MessageNormalizationTooltip")
+        tooltip:Show()
+
+        tooltipView.SetTooltipLine(tooltip, "Player-1-00000030", nil, 1, 0.82, 0)
+        assert.are.equal("iLvl: Unavailable", tooltip:GetLineText(1))
+
+        tooltipView.SetTooltipLine(tooltip, "Player-1-00000030", 640.5, 0.2, 1, 0.2)
+        assert.are.equal("iLvl: 640.5", tooltip:GetLineText(1))
+    end)
+
     it("resolves guid from tooltip unit token", function()
         local guid = "Player-1-00000022"
         env:setUnit("target", {

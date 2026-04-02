@@ -177,12 +177,22 @@ function NS.CreateInspectOrchestrator(deps)
             return false
         end
 
-        cache.MarkSuccess(guid, ilvl)
+        if not cache.MarkSuccess(guid, ilvl) then
+            return false
+        end
+
         return true, ilvl
     end
 
     completeSuccessfulInspect = function(guid, ilvl)
-        cache.MarkSuccess(guid, ilvl)
+        if not cache.MarkSuccess(guid, ilvl) then
+            cache.MarkFailure(guid, "invalid_ilvl")
+            finishInspect()
+            onVisibleUpdate(guid, "Unavailable", 1, 0.3, 0.3)
+            processQueue()
+            return
+        end
+
         finishInspect()
         onVisibleUpdate(guid)
         processQueue()

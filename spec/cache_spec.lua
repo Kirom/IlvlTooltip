@@ -97,4 +97,17 @@ describe("IlvlTooltip cache service", function()
         assert.is_nil(entry)
         assert.are.equal("none", state)
     end)
+
+    it("rejects invalid ilvl payloads on success writes", function()
+        local guid = "Player-1-00000007"
+
+        assert.is_false(cache.MarkSuccess(guid, "620"))
+        assert.is_false(cache.MarkSuccess(guid, 0))
+        assert.is_false(cache.MarkSuccess(guid, 0 / 0))
+
+        local text, _, _, _, hasValue, state = cache.GetDisplay(guid)
+        assert.is_nil(text)
+        assert.is_false(hasValue)
+        assert.are.equal("none", state)
+    end)
 end)

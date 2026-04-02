@@ -7,6 +7,8 @@ local Safe = NS.Safe
 
 local setmetatable = setmetatable
 local string_sub = string.sub
+local tostring = tostring
+local type = type
 
 function NS.CreateTooltipView()
     local tooltipLineCache = setmetatable({}, { __mode = "k" })
@@ -62,6 +64,22 @@ function NS.CreateTooltipView()
         return false
     end
 
+    local function setRenderState(tooltip, guid, lineText, red, green, blue)
+        local renderState = tooltipRenderState[tooltip]
+        if not renderState then
+            renderState = {}
+            tooltipRenderState[tooltip] = renderState
+        end
+
+        renderState.guid = guid
+        renderState.text = lineText
+        renderState.r = red
+        renderState.g = green
+        renderState.b = blue
+
+        return renderState
+    end
+
     function service.SetTooltipLine(tooltip, guid, message, r, g, b)
         if not tooltip then
             return
@@ -70,7 +88,15 @@ function NS.CreateTooltipView()
         local red = r or 1
         local green = g or 0.82
         local blue = b or 0
-        local lineText = C.ADDON_PREFIX .. " " .. message
+        local messageText
+        if message == nil then
+            messageText = "Unavailable"
+        elseif type(message) == "string" then
+            messageText = message
+        else
+            messageText = tostring(message)
+        end
+        local lineText = C.ADDON_PREFIX .. " " .. messageText
         local cachedLine = tooltipLineCache[tooltip]
         if cachedLine and not isLineOnTooltip(tooltip, cachedLine) then
             cachedLine = nil
@@ -89,16 +115,7 @@ function NS.CreateTooltipView()
             if startsWith(cachedText, C.ADDON_PREFIX) then
                 cachedLine:SetText(lineText)
                 cachedLine:SetTextColor(red, green, blue)
-
-                if not renderState then
-                    renderState = {}
-                    tooltipRenderState[tooltip] = renderState
-                end
-                renderState.guid = guid
-                renderState.text = lineText
-                renderState.r = red
-                renderState.g = green
-                renderState.b = blue
+                setRenderState(tooltip, guid, lineText, red, green, blue)
                 return
             end
 
@@ -110,16 +127,7 @@ function NS.CreateTooltipView()
             existingLine:SetText(lineText)
             existingLine:SetTextColor(red, green, blue)
             tooltipLineCache[tooltip] = existingLine
-
-            if not renderState then
-                renderState = {}
-                tooltipRenderState[tooltip] = renderState
-            end
-            renderState.guid = guid
-            renderState.text = lineText
-            renderState.r = red
-            renderState.g = green
-            renderState.b = blue
+            setRenderState(tooltip, guid, lineText, red, green, blue)
             return
         end
 
@@ -132,15 +140,7 @@ function NS.CreateTooltipView()
             end
         end
 
-        if not renderState then
-            renderState = {}
-            tooltipRenderState[tooltip] = renderState
-        end
-        renderState.guid = guid
-        renderState.text = lineText
-        renderState.r = red
-        renderState.g = green
-        renderState.b = blue
+        setRenderState(tooltip, guid, lineText, red, green, blue)
 
         if tooltip:IsShown() then
             tooltip:Show()

@@ -98,6 +98,27 @@ describe("IlvlTooltip inspect orchestrator", function()
         assert.are.equal(1, env.clearInspectCalls)
     end)
 
+    it("treats invalid inspect ilvl payload as failure", function()
+        local guid = "Player-1-00000026"
+        env:setUnit("target", {
+            guid = guid,
+            isPlayer = true,
+            canInspect = true,
+            inRange = true,
+        })
+        env:setInspectItemLevelFn(function()
+            return nil, "640"
+        end)
+
+        assert.is_true(inspect.Request("target", guid))
+        inspect.OnInspectReady(guid)
+
+        local _, _, _, _, hasValue = cache.GetDisplay(guid)
+        assert.is_false(hasValue)
+        assert.is_false(inspect.IsWaiting())
+        assert.are.equal("Unavailable", visibleUpdates[#visibleUpdates][2])
+    end)
+
     it("does not use zero-arg inspect ilvl fallback", function()
         local guid = "Player-1-00000025"
         env:setUnit("target", {

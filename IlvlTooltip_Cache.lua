@@ -7,6 +7,23 @@ local Safe = NS.Safe
 
 local math_min = math.min
 local string_format = string.format
+local type = type
+
+local function isValidIlvl(value)
+    if type(value) ~= "number" then
+        return false
+    end
+
+    if value <= 0 then
+        return false
+    end
+
+    if value ~= value or value == math.huge or value == -math.huge then
+        return false
+    end
+
+    return true
+end
 
 function NS.CreateCache()
     local cache = {}
@@ -26,7 +43,6 @@ function NS.CreateCache()
 
         entry = {
             ilvl = nil,
-            fetchedAt = 0,
             softExpireAt = 0,
             hardExpireAt = 0,
             lastAttemptAt = 0,
@@ -52,7 +68,7 @@ function NS.CreateCache()
         end
 
         local ilvl = entry.ilvl
-        if not ilvl or ilvl <= 0 then
+        if not isValidIlvl(ilvl) then
             return entry, "none"
         end
 
@@ -156,17 +172,21 @@ function NS.CreateCache()
     function service.MarkSuccess(guid, ilvl)
         local entry = ensureCacheEntry(guid)
         if not entry then
-            return
+            return false
+        end
+
+        if not isValidIlvl(ilvl) then
+            return false
         end
 
         local now = API.GetTime()
         entry.ilvl = ilvl
-        entry.fetchedAt = now
         entry.softExpireAt = now + C.HOT_CACHE_TTL
         entry.hardExpireAt = now + C.WARM_CACHE_TTL
         entry.lastAttemptAt = now
         entry.failCount = 0
         entry.lastStatus = "ok"
+        return true
     end
 
     function service.MarkFailure(guid, status)
@@ -182,7 +202,7 @@ function NS.CreateCache()
 
     function service.GetDisplay(guid)
         local entry, state = service.GetState(guid)
-        if not entry or not entry.ilvl or entry.ilvl <= 0 then
+        if not entry or not isValidIlvl(entry.ilvl) then
             return nil, nil, nil, nil, false, state
         end
 

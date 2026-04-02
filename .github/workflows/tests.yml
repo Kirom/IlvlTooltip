@@ -27,9 +27,22 @@ jobs:
           lua -v
           luarocks --version
 
+      - name: Cache LuaRocks
+        uses: actions/cache@v5
+        with:
+          path: |
+            ~/.cache/luarocks
+            ~/.luarocks
+          key: ${{ runner.os }}-luarocks-5.4-${{ hashFiles('.github/workflows/tests.yml') }}
+          restore-keys: |
+            ${{ runner.os }}-luarocks-5.4-
+
+      - name: Add LuaRocks bin to PATH
+        run: echo "$HOME/.luarocks/bin" >> "$GITHUB_PATH"
+
       - name: Install test dependencies
         run: |
-          sudo luarocks --lua-version=5.4 install busted
+          luarocks --lua-version=5.4 install busted --local
 
       - name: Run tests
         run: |
