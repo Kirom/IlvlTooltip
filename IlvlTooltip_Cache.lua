@@ -103,8 +103,8 @@ function NS.CreateCache()
         end
 
         local now = API.GetTime()
-        local fetchedAt = entry.fetchedAt or 0
-        if fetchedAt <= 0 then
+        local fetchedAt = entry.fetchedAt
+        if type(fetchedAt) ~= "number" then
             return entry, "expired"
         end
 
@@ -179,8 +179,8 @@ function NS.CreateCache()
             end
 
             if not protected then
-                local fetchedAt = entry.fetchedAt or 0
-                local hardExpired = fetchedAt <= 0 or now > (fetchedAt + warmCacheTTL)
+                local fetchedAt = entry.fetchedAt
+                local hardExpired = type(fetchedAt) ~= "number" or now > (fetchedAt + warmCacheTTL)
 
                 local inBackoff = false
                 if (entry.failCount or 0) > 0 and entry.lastStatus ~= CACHE_STATUS.OK and entry.lastStatus ~= CACHE_STATUS.PENDING then
