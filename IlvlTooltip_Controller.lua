@@ -95,7 +95,7 @@ function Controller.Start()
             return
         end
 
-        inspect.Request(unit, guid)
+        inspect.Request(unit, guid, { skipBackoffCheck = true })
     end
 
     local function onTooltipSetUnit(tooltip, data)
@@ -147,7 +147,7 @@ function Controller.Start()
         local pendingOrQueued = inspect.IsPendingOrQueued(guid)
 
         if inspectable and not backoffActive and shouldRefreshCacheState(cacheState) then
-            if not pendingOrQueued and inspect.Request(unit, guid, { priority = true }) then
+            if not pendingOrQueued and inspect.Request(unit, guid, { priority = true, skipBackoffCheck = true }) then
                 pendingOrQueued = true
             end
         end

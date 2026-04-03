@@ -4,6 +4,7 @@ IlvlTooltip = NS
 local C = NS.Constants
 local API = NS.Api
 local Safe = NS.Safe
+local CACHE_STATUS = C.CACHE_STATUS
 
 local math_min = math.min
 local string_format = string.format
@@ -47,7 +48,7 @@ function NS.CreateCache()
             hardExpireAt = 0,
             lastAttemptAt = 0,
             failCount = 0,
-            lastStatus = "none",
+            lastStatus = CACHE_STATUS.NONE,
         }
         cache[guid] = entry
         return entry
@@ -59,17 +60,17 @@ function NS.CreateCache()
 
     function service.GetState(guid)
         if not Safe.IsGuid(guid) then
-            return nil, "none"
+            return nil, CACHE_STATUS.NONE
         end
 
         local entry = guid and cache[guid]
         if not entry then
-            return nil, "none"
+            return nil, CACHE_STATUS.NONE
         end
 
         local ilvl = entry.ilvl
         if not isValidIlvl(ilvl) then
-            return entry, "none"
+            return entry, CACHE_STATUS.NONE
         end
 
         local now = API.GetTime()
@@ -107,7 +108,7 @@ function NS.CreateCache()
             return false, 0
         end
 
-        if entry.lastStatus == "ok" or entry.lastStatus == "pending" then
+        if entry.lastStatus == CACHE_STATUS.OK or entry.lastStatus == CACHE_STATUS.PENDING then
             return false, 0
         end
 
@@ -144,7 +145,7 @@ function NS.CreateCache()
                 local hardExpired = hardExpireAt > 0 and now > hardExpireAt
 
                 local inBackoff = false
-                if (entry.failCount or 0) > 0 and entry.lastStatus ~= "ok" and entry.lastStatus ~= "pending" then
+                if (entry.failCount or 0) > 0 and entry.lastStatus ~= CACHE_STATUS.OK and entry.lastStatus ~= CACHE_STATUS.PENDING then
                     local backoff = service.GetFailureBackoff(entry.failCount)
                     inBackoff = (now - (entry.lastAttemptAt or 0)) < backoff
                 end
@@ -152,7 +153,7 @@ function NS.CreateCache()
                 local hasIlvl = isValidIlvl(entry.ilvl)
                 if hardExpired and not inBackoff then
                     cache[guid] = nil
-                elseif not hasIlvl and not inBackoff and entry.lastStatus ~= "pending" then
+                elseif not hasIlvl and not inBackoff and entry.lastStatus ~= CACHE_STATUS.PENDING then
                     cache[guid] = nil
                 end
             end
@@ -166,7 +167,7 @@ function NS.CreateCache()
         end
 
         entry.lastAttemptAt = API.GetTime()
-        entry.lastStatus = "pending"
+        entry.lastStatus = CACHE_STATUS.PENDING
     end
 
     function service.MarkSuccess(guid, ilvl)
@@ -185,7 +186,7 @@ function NS.CreateCache()
         entry.hardExpireAt = now + C.WARM_CACHE_TTL
         entry.lastAttemptAt = now
         entry.failCount = 0
-        entry.lastStatus = "ok"
+        entry.lastStatus = CACHE_STATUS.OK
         return true
     end
 
@@ -197,7 +198,7 @@ function NS.CreateCache()
 
         entry.lastAttemptAt = API.GetTime()
         entry.failCount = math_min((entry.failCount or 0) + 1, 10)
-        entry.lastStatus = status or "failed"
+        entry.lastStatus = status or CACHE_STATUS.FAILED
     end
 
     function service.GetDisplay(guid)
@@ -206,7 +207,7 @@ function NS.CreateCache()
             return nil, nil, nil, nil, false, state
         end
 
-        local stale = state ~= "fresh" or entry.lastStatus ~= "ok"
+        local stale = state ~= "fresh" or entry.lastStatus ~= CACHE_STATUS.OK
         local text = string_format("%.1f", entry.ilvl)
         if stale then
             return text .. " (stale)", 1, 0.82, 0, true, state

@@ -3,6 +3,17 @@ IlvlTooltip = NS
 
 NS.Constants = {
     ADDON_PREFIX = "iLvl:",
+    CACHE_STATUS = {
+        NONE = "none",
+        PENDING = "pending",
+        OK = "ok",
+        FAILED = "failed",
+    },
+    INSPECT_FAILURE = {
+        TIMEOUT = "timeout",
+        NO_DATA = "no_data",
+        INVALID_ILVL = "invalid_ilvl",
+    },
     HOT_CACHE_TTL = 60,
     WARM_CACHE_TTL = 600,
     INSPECT_COOLDOWN = 1.5,

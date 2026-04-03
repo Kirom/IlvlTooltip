@@ -4,6 +4,7 @@ IlvlTooltip = NS
 local C = NS.Constants
 local API = NS.Api
 local Safe = NS.Safe
+local INSPECT_FAILURE = C.INSPECT_FAILURE
 
 local type = type
 
@@ -91,6 +92,10 @@ function NS.CreateInspectOrchestrator(deps)
 
         existing.cancelled = true
         queuedEntriesByGuid[guid] = nil
+
+        if not waitingForInspect and processQueue then
+            processQueue()
+        end
     end
 
     local function tryBuiltInInspectItemLevel(unit)
@@ -201,7 +206,7 @@ function NS.CreateInspectOrchestrator(deps)
 
     completeSuccessfulInspect = function(guid, ilvl)
         if not cache.MarkSuccess(guid, ilvl) then
-            cache.MarkFailure(guid, "invalid_ilvl")
+            cache.MarkFailure(guid, INSPECT_FAILURE.INVALID_ILVL)
             finishInspect()
             onVisibleUpdate(guid, "Unavailable", 1, 0.3, 0.3)
             processQueue()
@@ -250,7 +255,7 @@ function NS.CreateInspectOrchestrator(deps)
 
         pendingTimeoutTimer = scheduleTimer(C.INSPECT_TIMEOUT, function()
             if waitingForInspect and Safe.GuidEquals(pendingGuid, guid) then
-                cache.MarkFailure(guid, "timeout")
+                cache.MarkFailure(guid, INSPECT_FAILURE.TIMEOUT)
                 finishInspect()
                 onVisibleUpdate(guid, "Unavailable", 1, 0.3, 0.3)
                 processQueue()
@@ -339,14 +344,16 @@ function NS.CreateInspectOrchestrator(deps)
     end
 
     function service.Request(unit, guid, options)
-        if not Safe.IsGuid(guid) or service.IsPendingOrQueued(guid) then
-            local requestedPriority = false
-            if type(options) == "table" then
-                requestedPriority = options.priority == true
-            elseif options == true then
-                requestedPriority = true
-            end
+        local requestedPriority = false
+        local skipBackoffCheck = false
+        if type(options) == "table" then
+            requestedPriority = options.priority == true
+            skipBackoffCheck = options.skipBackoffCheck == true
+        elseif options == true then
+            requestedPriority = true
+        end
 
+        if not Safe.IsGuid(guid) or service.IsPendingOrQueued(guid) then
             if requestedPriority then
                 return enqueueInspect(unit, guid, true)
             end
@@ -354,19 +361,14 @@ function NS.CreateInspectOrchestrator(deps)
             return false
         end
 
-        local backoffActive = cache.IsInFailureBackoff(guid)
-        if backoffActive then
-            return false
+        if not skipBackoffCheck then
+            local backoffActive = cache.IsInFailureBackoff(guid)
+            if backoffActive then
+                return false
+            end
         end
 
-        local priority = false
-        if type(options) == "table" then
-            priority = options.priority == true
-        elseif options == true then
-            priority = true
-        end
-
-        return enqueueInspect(unit, guid, priority)
+        return enqueueInspect(unit, guid, requestedPriority)
     end
 
     resolveInspectWithRetry = function(guid, unit, attempt)
@@ -388,7 +390,7 @@ function NS.CreateInspectOrchestrator(deps)
             return
         end
 
-        cache.MarkFailure(guid, "no_data")
+        cache.MarkFailure(guid, INSPECT_FAILURE.NO_DATA)
         finishInspect()
         onVisibleUpdate(guid, "Unavailable", 1, 0.3, 0.3)
         processQueue()
