@@ -10,6 +10,36 @@ local math_min = math.min
 local string_format = string.format
 local type = type
 
+local function getHotCacheTTL()
+    local settings = NS.Settings
+    if settings and settings.GetHotCacheTTL then
+        local ttl = settings.GetHotCacheTTL()
+        if type(ttl) == "number" and ttl > 0 then
+            return ttl
+        end
+    end
+
+    return C.HOT_CACHE_TTL
+end
+
+local function getWarmCacheTTL(hotCacheTTL)
+    local settings = NS.Settings
+    if settings and settings.GetWarmCacheTTL then
+        local ttl = settings.GetWarmCacheTTL()
+        if type(ttl) == "number" and ttl > 0 then
+            if ttl < hotCacheTTL then
+                return hotCacheTTL
+            end
+            return ttl
+        end
+    end
+
+    if C.WARM_CACHE_TTL < hotCacheTTL then
+        return hotCacheTTL
+    end
+    return C.WARM_CACHE_TTL
+end
+
 local function isValidIlvl(value)
     if type(value) ~= "number" then
         return false
@@ -44,8 +74,7 @@ function NS.CreateCache()
 
         entry = {
             ilvl = nil,
-            softExpireAt = 0,
-            hardExpireAt = 0,
+            fetchedAt = 0,
             lastAttemptAt = 0,
             failCount = 0,
             lastStatus = CACHE_STATUS.NONE,
@@ -74,11 +103,18 @@ function NS.CreateCache()
         end
 
         local now = API.GetTime()
-        if now <= (entry.softExpireAt or 0) then
+        local fetchedAt = entry.fetchedAt or 0
+        if fetchedAt <= 0 then
+            return entry, "expired"
+        end
+
+        local hotCacheTTL = getHotCacheTTL()
+        local warmCacheTTL = getWarmCacheTTL(hotCacheTTL)
+        if now <= (fetchedAt + hotCacheTTL) then
             return entry, "fresh"
         end
 
-        if now <= (entry.hardExpireAt or 0) then
+        if now <= (fetchedAt + warmCacheTTL) then
             return entry, "warm"
         end
 
@@ -133,6 +169,8 @@ function NS.CreateCache()
         end
 
         lastCacheSweepAt = now
+        local hotCacheTTL = getHotCacheTTL()
+        local warmCacheTTL = getWarmCacheTTL(hotCacheTTL)
 
         for guid, entry in pairs(cache) do
             local protected = false
@@ -141,8 +179,8 @@ function NS.CreateCache()
             end
 
             if not protected then
-                local hardExpireAt = entry.hardExpireAt or 0
-                local hardExpired = hardExpireAt > 0 and now > hardExpireAt
+                local fetchedAt = entry.fetchedAt or 0
+                local hardExpired = fetchedAt <= 0 or now > (fetchedAt + warmCacheTTL)
 
                 local inBackoff = false
                 if (entry.failCount or 0) > 0 and entry.lastStatus ~= CACHE_STATUS.OK and entry.lastStatus ~= CACHE_STATUS.PENDING then
@@ -182,8 +220,7 @@ function NS.CreateCache()
 
         local now = API.GetTime()
         entry.ilvl = ilvl
-        entry.softExpireAt = now + C.HOT_CACHE_TTL
-        entry.hardExpireAt = now + C.WARM_CACHE_TTL
+        entry.fetchedAt = now
         entry.lastAttemptAt = now
         entry.failCount = 0
         entry.lastStatus = CACHE_STATUS.OK

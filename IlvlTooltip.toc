@@ -3,8 +3,10 @@
 ## Notes: Adds hovered player item level to the tooltip.
 ## Author: Kirom
 ## Version: 2.0.0
+## SavedVariables: IlvlTooltipDB
 
 IlvlTooltip_Constants.lua
+IlvlTooltip_Settings.lua
 IlvlTooltip_Safe.lua
 IlvlTooltip_Cache.lua
 IlvlTooltip_TooltipView.lua

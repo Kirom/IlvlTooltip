@@ -23,6 +23,11 @@ function Controller.Start()
     end
     started = true
 
+    if NS.Settings then
+        NS.Settings.Initialize()
+        NS.Settings.RegisterOptions()
+    end
+
     local cache = NS.CreateCache()
     local tooltipView = NS.CreateTooltipView()
     local inspect
@@ -174,6 +179,7 @@ function Controller.Start()
         frame:RegisterEvent("INSPECT_READY")
         frame:RegisterEvent("UPDATE_MOUSEOVER_UNIT")
         frame:RegisterEvent("PLAYER_TARGET_CHANGED")
+        frame:RegisterEvent("PLAYER_LOGIN")
         frame:SetScript("OnEvent", function(_, event, guid)
             if event == "INSPECT_READY" then
                 inspect.OnInspectReady(guid)
@@ -187,6 +193,11 @@ function Controller.Start()
 
             if event == "PLAYER_TARGET_CHANGED" then
                 prefetchUnit("target")
+                return
+            end
+
+            if event == "PLAYER_LOGIN" and NS.Settings then
+                NS.Settings.RegisterOptions()
             end
         end)
     end

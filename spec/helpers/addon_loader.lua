@@ -2,6 +2,7 @@ local Loader = {}
 
 local FULL_MODULE_LIST = {
     "IlvlTooltip_Constants.lua",
+    "IlvlTooltip_Settings.lua",
     "IlvlTooltip_Safe.lua",
     "IlvlTooltip_Cache.lua",
     "IlvlTooltip_TooltipView.lua",
@@ -25,6 +26,7 @@ end
 function Loader.LoadCore()
     return Loader.LoadModules({
         "IlvlTooltip_Constants.lua",
+        "IlvlTooltip_Settings.lua",
         "IlvlTooltip_Safe.lua",
         "IlvlTooltip_Cache.lua",
         "IlvlTooltip_TooltipView.lua",
